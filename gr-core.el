@@ -1,4 +1,4 @@
-;;; gr-core.el --- Kernal of gr. -*- lexical-binding: t -*-
+;;; gr-core.el --- kernal of gr. -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2020 Hongjian Zhu <zhu.life@gmail.com>
 
@@ -38,10 +38,16 @@
   (exit-minibuffer))
 
 (defun gr-previous-line ()
-  (interactive))
+  (interactive)
+  (with-gr-window
+   (forward-line -1)
+   (gr-mark-current-line)))
 
 (defun gr-next-line ()
-  (interactive))
+  (interactive)
+  (with-gr-window
+   (forward-line 1)
+   (gr-mark-current-line)))
 
 (defun gr-previous-page ()
   (interactive))
@@ -83,17 +89,53 @@
   `(with-current-buffer gr-buffer
 	 ,@body))
 
-(defun gr-create-gr-buffer ()
-  (with-current-buffer (get-buffer-create gr-buffer)
-	(kill-all-local-variables)
-	(buffer-disable-undo)
-	(erase-buffer)
-	(make-local-variable 'gr-source)
-	(setq cursor-type nil))
-  (gr-init-overlays)
-  (get-buffer gr-buffer))
+(defmacro with-gr-window (&rest body)
+  `(with-selected-window (gr-window)
+	 ,@body))
 
-(defun gr-init-overlays ())
+(defun gr-create-gr-buffer ()
+  (let ((inhibit-read-only t))
+	(with-current-buffer (get-buffer-create gr-buffer)
+	  (kill-all-local-variables)
+	  (set (make-local-variable 'buffer-read-only) nil)
+	  (buffer-disable-undo)
+	  (erase-buffer)
+	  (make-local-variable 'gr-source)
+	  (setq require-final-newline nil)
+	  (setq cursor-type nil))
+	(gr-init-overlays gr-buffer)
+	(get-buffer gr-buffer)))
+
+(defvar gr-selection-overlay nil
+  "overlay used to highlight the currently selected item")
+
+(defgroup gr-faces nil
+  ""
+  :prefix "gr-"
+  :group 'faces
+  :group 'gr)
+;; (defface gr-selection
+;;   `((t ,@(and (>= emacs-major-version 27) '(:extend t))
+;; 	   :inherit highlight :distant-foreground "black"))
+;;   ""
+;;   :group 'gr-faces)
+
+(defface gr-selection
+  `((((background dark))
+	 :extend t
+	 :background "ForestGreen"
+	 :distant-foreground "black")
+	(((background light))
+	 :extend t
+	 :background "#b5ffd1"
+	 :distant-foreground "black"))
+  "face for currently selected item in the gr buffer"
+  :group 'gr-faces)
+
+(defun gr-init-overlays (buffer)
+  (setq gr-selection-overlay (make-overlay (point-min) (point-min) (get-buffer buffer)))
+  (overlay-put gr-selection-overlay 'face 'gr-selection)
+  (overlay-put gr-selection-overlay 'priority 1))
 
 (defun gr-core (&optional prompt input source filter)
   (gr-create-gr-buffer)
@@ -108,6 +150,7 @@
 
   ;; display source at the very beginning
   (gr-render)
+  (gr-move-to-first-line)
 
   (unwind-protect
 	  (gr-read-pattern prompt input)
@@ -144,7 +187,8 @@
   (with-gr-buffer
    (unwind-protect
 	   (let* ((matches (gr-core-search-in-list gr-source gr-pattern)))
-		 (gr-render matches))
+		 (gr-render matches)
+		 (gr-move-to-first-line))
 	 (setq gr-in-update nil))))
 
 (defun gr-render (&optional matches)
@@ -153,11 +197,23 @@
 		 (gr-render-matches matches))
 		((or (null gr-pattern)
 			 (zerop (length gr-pattern)))
-		 (gr-render-matches gr-source)))
-  (goto-char (point-min)))
+		 (gr-render-matches gr-source))))
+
+(defun gr-move-to-first-line ()
+  "goto first line of `gr-buffer'"
+  (goto-char (point-min))
+  (gr-mark-current-line))
+
+(defun gr-mark-current-line ()
+  (with-gr-buffer
+   (move-overlay gr-selection-overlay (point-at-bol) (1+ (point-at-eol)))))
 
 (defun gr-render-matches (matches)
-  (insert (mapconcat 'identity matches "\n")))
+  (cl-loop for m in matches
+  		   do (gr-insert-match m)))
+
+(defun gr-insert-match (match)
+  (insert match "\n"))
 
 (defun gr-core-search-in-list (source pattern)
   (let ((matched (cl-loop for s in source
