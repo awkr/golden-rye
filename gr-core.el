@@ -157,7 +157,8 @@
 
   (unwind-protect
 	  (gr-read-pattern prompt input)
-	(gr-cleanup)))
+	(gr-cleanup))
+  (setq gr-pattern ""))
 
 (defun gr-read-pattern (&optional prompt input)
   (with-gr-buffer
