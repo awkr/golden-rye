@@ -47,13 +47,9 @@
 
 (defun gr-forward-and-mark-line (linum)
   (with-gr-window
-   (if (> linum 0)
-	   (unless (gr-edge-of-buffer-p 1)
-		 (forward-line linum)
-		 (gr-mark-current-line))
-	 (unless (gr-edge-of-buffer-p -1)
-	   (forward-line linum)
-	   (gr-mark-current-line)))))
+   (unless (gr-edge-of-buffer-p linum)
+	 (forward-line linum)
+	 (gr-mark-current-line))))
 
 (defun gr-edge-of-buffer-p (n)
   "return non-nil if we are at EOB or BOB"
