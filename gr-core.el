@@ -152,8 +152,9 @@
   (setq gr-source source)
 
   ;; display source at the very beginning
-  (gr-render)
-  (gr-move-to-first-line)
+  (when (or (null input) (zerop (length input)))
+	(gr-render)
+	(gr-move-to-first-line))
 
   (unwind-protect
 	  (gr-read-pattern prompt input)
