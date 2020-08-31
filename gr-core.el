@@ -39,15 +39,27 @@
 
 (defun gr-previous-line ()
   (interactive)
-  (with-gr-window
-   (forward-line -1)
-   (gr-mark-current-line)))
+  (gr-forward-and-mark-line -1))
 
 (defun gr-next-line ()
   (interactive)
+  (gr-forward-and-mark-line 1))
+
+(defun gr-forward-and-mark-line (linum)
   (with-gr-window
-   (forward-line 1)
-   (gr-mark-current-line)))
+   (if (> linum 0)
+	   (unless (gr-edge-of-buffer-p 1)
+		 (forward-line linum)
+		 (gr-mark-current-line))
+	 (unless (gr-edge-of-buffer-p -1)
+	   (forward-line linum)
+	   (gr-mark-current-line)))))
+
+(defun gr-edge-of-buffer-p (n)
+  "return non-nil if we are at EOB or BOB"
+  (save-excursion
+	(forward-line n)
+	(eq (point-at-bol) (point-at-eol))))
 
 (defun gr-previous-page ()
   (interactive))
@@ -114,11 +126,6 @@
   :prefix "gr-"
   :group 'faces
   :group 'gr)
-;; (defface gr-selection
-;;   `((t ,@(and (>= emacs-major-version 27) '(:extend t))
-;; 	   :inherit highlight :distant-foreground "black"))
-;;   ""
-;;   :group 'gr-faces)
 
 (defface gr-selection
   `((((background dark))
@@ -210,10 +217,7 @@
 
 (defun gr-render-matches (matches)
   (cl-loop for m in matches
-  		   do (gr-insert-match m)))
-
-(defun gr-insert-match (match)
-  (insert match "\n"))
+  		   do (insert m "\n")))
 
 (defun gr-core-search-in-list (source pattern)
   (let ((matched (cl-loop for s in source
