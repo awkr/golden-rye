@@ -6,9 +6,12 @@
 
 ;;; Code:
 
-(defvar gr-buffer "*Golden Rye*")
+(require 'gr-proc)
+
+(defconst gr-buffer "*Golden Rye*")
+
 (defvar gr-last-window-config nil)
-(defvar gr-display-buffer-height 13)
+(defvar gr-display-buffer-height 8)
 (defvar gr-pattern "")
 (defvar gr-source nil
   "a list of candidates")
@@ -58,10 +61,16 @@
 	(eq (point-at-bol) (point-at-eol))))
 
 (defun gr-previous-page ()
-  (interactive))
+  (interactive)
+  (with-gr-window
+   (scroll-down)
+   (gr-mark-current-line)))
 
 (defun gr-next-page ()
-  (interactive))
+  (interactive)
+  (with-gr-window
+   (scroll-up)
+   (gr-mark-current-line)))
 
 (defvar gr-map
   (let ((map (make-sparse-keymap)))
@@ -236,10 +245,11 @@
   	(if (not idx) nil
 	  t)))
 
+(defun gr-get-git-root ()
+  (gr-proc-output "/usr/local/bin/git" "rev-parse" "--show-toplevel"))
+
 (provide 'gr-core)
 ;;; gr-core.el ends here
 
 ;; test
-(gr-core "" "a" '("hey" "hello" "jack" "apple" "peter"))
-(gr-core "Search: " "" '("hey" "hello" "jack" "apple" "peter"))
-(gr-core nil nil '("hey" "hello" "jack" "apple" "peter"))
+(gr-core nil "a" '("hey" "hello" "jack" "apple" "peter" "rose" "tom" "sum"))
