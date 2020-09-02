@@ -1,22 +1,23 @@
 ;; search in current workspace
-;; a gr interface to ripgrep
 
-(require 'gr-proc)
+(require 'gr-source)
+(require 'gr-core)
 
-(defconst gr-rg-mi-search-chars 2)
-(defconst gr-rg-proc-name "*gr-rg-proc*")
-(defconst gr-rg-proc-buffer-name "*gr-rg-output*")
+(defconst gr-rg--gr-buffer-name "*gr-rg*")
+(defconst gr-rg--proc-name "*gr-rg--rg-proc*")
+(defconst gr-rg--proc-buffer-name "*gr-rg--rg-output*")
 
-(defun gr-rg-cleanup ()
-  ;; todo delete overlays
-  (gr-rg-kill-rg-proc))
+(defun gr-rg-make-proc ()
+  (let* ((proc (make-process :name gr-rg--proc-name
+							 :buffer gr-rg--proc-buffer-name
+							 :command '("echo" "\"hello\nworld\"")
+							 :noquery t)))
+	(set-process-query-on-exit-flag proc nil)
+	proc))
 
-(defun gr-rg-kill-rg-proc ()
-  (let ((proc (get-process gr-rg-proc-name)))
-	(when (process-live-p proc)
-	  (delete-process proc))))
+(defconst gr-rg-proc-source
+  (gr-make-source "gr-rg" 'gr-source-async
+	:candidates-process #'gr-rg-make-proc))
 
-;; test rg process
-(unwind-protect
-	(gr-proc-output "/usr/local/bin/rg" "ignore" "/Users/blue/proj/golden-rye")
-  (gr-rg-cleanup))
+;; test
+(gr-core nil nil gr-rg-proc-source gr-rg--gr-buffer-name)

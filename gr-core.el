@@ -8,10 +8,10 @@
 
 (require 'gr-proc)
 
-(defconst gr-buffer "*Golden Rye*")
+(defconst gr-buffer "*gr*")
 
 (defvar gr-last-window-config nil)
-(defvar gr-display-buffer-height 8)
+(defvar gr-buffer-height 8)
 (defvar gr-pattern "")
 (defvar gr-source nil
   "a list of candidates")
@@ -149,21 +149,25 @@
   (overlay-put gr-selection-overlay 'face 'gr-selection)
   (overlay-put gr-selection-overlay 'priority 1))
 
-(defun gr-core (&optional prompt input source filter)
-  (gr-create-gr-buffer)
-  (gr-window-config 'save)
+(defun gr-display-buffer (buffer)
   (let* ((split-window-preferred-function #'(lambda (window)
 											  (split-window window nil 'below))))
-	(display-buffer gr-buffer `(nil (window-height . ,gr-display-buffer-height) (window-width . 0)))
+	(display-buffer buffer `(nil (window-height . ,gr-buffer-height) (window-width . 0)))
 	(select-window (gr-window))
-	(gr-prevent-switching-other-window))
+	(gr-prevent-switching-other-window)))
+
+(defun gr-core (&optional prompt input source buffer)
+  (gr-create-gr-buffer)
+  (gr-window-config 'save)
+  (setq gr-buffer (or buffer gr-buffer))
+  (gr-display-buffer gr-buffer)
 
   (setq gr-source source)
 
-  ;; display source at the very beginning
-  (when (or (null input) (zerop (length input)))
-	(gr-render)
-	(gr-move-to-first-line))
+  ;; ;; display source at the very beginning
+  ;; (when (or (null input) (zerop (length input)))
+  ;; 	(gr-render)
+  ;; 	(gr-move-to-first-line))
 
   (unwind-protect
 	  (gr-read-pattern prompt input)
@@ -172,6 +176,7 @@
 
 (defun gr-read-pattern (&optional prompt input)
   (with-gr-buffer
+   (gr-update)
    (let* (timer)
 	 (unwind-protect
 		 (minibuffer-with-setup-hook
@@ -179,10 +184,9 @@
 			   (gr-minor-mode 1)
 			   (setq timer
 					 (run-with-idle-timer
-					  0.01
-					  'repeat
+					  0.01 'repeat
 					  (lambda ()
-						(save-selected-window (gr-check-minibuffer-input))))))
+						(save-selected-window (gr-check-minibuffer-input)))))) ;; end lambda
 		   (read-from-minibuffer (propertize (or prompt "pattern: ")) input nil nil nil nil t))
 	   (when timer
 		 (cancel-timer timer)
@@ -200,18 +204,54 @@
 (defun gr-update ()
   (with-gr-buffer
    (unwind-protect
-	   (let* ((matches (gr-core-search-in-list gr-source gr-pattern)))
-		 (gr-render matches)
-		 (gr-move-to-first-line))
+	   (let* ((matches (gr-compute-matches gr-source)))
+		 (when matches
+		   (erase-buffer)
+		   (gr-render-matches matches)
+		   ;; (gr-move-to-first-line)
+		   )
+		 )
 	 (setq gr-in-update nil))))
 
-(defun gr-render (&optional matches)
-  (erase-buffer)
-  (cond (matches
-		 (gr-render-matches matches))
-		((or (null gr-pattern)
-			 (zerop (length gr-pattern)))
-		 (gr-render-matches gr-source))))
+(defun gr-compute-matches (source)
+  "start computing candidates in SOURCE"
+  (save-current-buffer
+	(let ((candidates (gr-get-candidates source)))
+	  (if (or (null gr-pattern)
+			  (zerop (length gr-pattern)))
+		  ;; compute all candidates up to LIMIT
+		  candidates
+		(gr-core-search-in-list candidates gr-pattern)))))
+
+(defun gr-get-candidates (source)
+  "retrieve and return the list of candidates from SOURCE, only return nil when source is async"
+  (let* ((fn (assoc-default 'candidates source))
+		 (proc (assoc-default 'candidates-process source))
+		 (inhibit-quit proc)
+		 (candidates (if proc (funcall proc)
+					   fn)))
+	(cond ((processp candidates)
+		   ;; candidates will be filtered in process filter
+		   (set-process-filter candidates 'gr-output-filter)
+		   (setq candidates nil))
+		  ((null candidates)
+		   '())
+		  (t candidates))))
+
+(defun gr-output-filter (process output)
+  "the `process-filter' function for gr async source"
+  (with-gr-buffer
+   (let* ((candidates (split-string output "\n"))
+		  (matched (gr-core-search-in-list candidates gr-pattern)))
+	 (erase-buffer)
+	 (gr-render-matches matched))))
+
+(defun gr-render-matches (matches)
+  (cl-loop for m in matches
+  		   do (gr-insert-match m)))
+
+(defun gr-insert-match (m)
+  (insert m "\n"))
 
 (defun gr-move-to-first-line ()
   "goto first line of `gr-buffer'"
@@ -221,10 +261,6 @@
 (defun gr-mark-current-line ()
   (with-gr-buffer
    (move-overlay gr-selection-overlay (point-at-bol) (1+ (point-at-eol)))))
-
-(defun gr-render-matches (matches)
-  (cl-loop for m in matches
-  		   do (insert m "\n")))
 
 (defun gr-core-search-in-list (source pattern)
   (let ((matched (cl-loop for s in source
@@ -249,7 +285,5 @@
   (gr-proc-output "/usr/local/bin/git" "rev-parse" "--show-toplevel"))
 
 (provide 'gr-core)
-;;; gr-core.el ends here
 
-;; test
-(gr-core nil "a" '("hey" "hello" "jack" "apple" "peter" "rose" "tom" "sum"))
+;;; gr-core.el ends here
