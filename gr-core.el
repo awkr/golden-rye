@@ -219,7 +219,6 @@
 	(let ((candidates (gr-get-candidates source)))
 	  (if (or (null gr-pattern)
 			  (zerop (length gr-pattern)))
-		  ;; compute all candidates up to LIMIT
 		  candidates
 		(gr-core-search-in-list candidates gr-pattern)))))
 
