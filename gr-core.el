@@ -14,7 +14,6 @@
   "current window where `gr' is invoked")
 (defvar gr-last-window-config nil)
 (defvar gr-buffer-height 8)
-(defvar gr-buffer-body-height 7)
 (defvar gr-pattern "")
 (defvar gr-source nil
   "a list of candidates")
@@ -177,7 +176,7 @@ the shorest distance and confident that `gr' will always appear in the same plac
 		   (split-window (selected-window) nil 'below))
 		  (t ;; more than one window
 		   (let* ((w (gr-get-edge-window-in-direction (selected-window) 'below)))
-			 (if (> (window-body-height w) gr-buffer-body-height)
+			 (if (> (window-body-height w) (- gr-buffer-height 1))
 				 (split-window w nil 'below)
 			   w))))))
 
