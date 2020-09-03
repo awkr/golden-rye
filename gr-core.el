@@ -151,23 +151,6 @@
   (overlay-put gr-selection-overlay 'face 'gr-selection)
   (overlay-put gr-selection-overlay 'priority 1))
 
-;; (defun gr-get-window-to-split (_w)
-;;   (let* (split-width-threshold
-;; 		 (win (if (one-window-p t)
-;; 				  (split-window (selected-window) nil 'below)
-;; 				;; more than one window
-;; 				(let* ((w (gr-get-edge-window-in-direction (selected-window) 'below)))
-;; 				  (when (eq w gr-current-window)
-;; 					(if (> (window-body-height w) (* gr-buffer-body-height 2))
-;; 						(setq w (split-window w nil 'below))
-;; 					  (setq w (gr-get-edge-window-in-direction
-;; 							   (window-in-direction 'right (selected-window))
-;; 							   'below))
-;; 					  (when (> (window-body-height w) gr-buffer-body-height)
-;; 						(setq w (split-window w nil 'below)))))
-;; 				  w))))
-;; 	win))
-
 (defun gr-get-window-to-split (_w)
   "for making eyes comfortable, `gr' prefer vertically align for making eyes moving
 the shorest distance and confident that `gr' will always appear in the same place"
