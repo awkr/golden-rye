@@ -10,8 +10,11 @@
 
 (defconst gr-buffer "*gr*")
 
+(defvar gr-current-window nil
+  "current window where `gr' is invoked")
 (defvar gr-last-window-config nil)
 (defvar gr-buffer-height 8)
+(defvar gr-buffer-body-height 7)
 (defvar gr-pattern "")
 (defvar gr-source nil
   "a list of candidates")
@@ -149,14 +152,49 @@
   (overlay-put gr-selection-overlay 'face 'gr-selection)
   (overlay-put gr-selection-overlay 'priority 1))
 
+;; (defun gr-get-window-to-split (_w)
+;;   (let* (split-width-threshold
+;; 		 (win (if (one-window-p t)
+;; 				  (split-window (selected-window) nil 'below)
+;; 				;; more than one window
+;; 				(let* ((w (gr-get-edge-window-in-direction (selected-window) 'below)))
+;; 				  (when (eq w gr-current-window)
+;; 					(if (> (window-body-height w) (* gr-buffer-body-height 2))
+;; 						(setq w (split-window w nil 'below))
+;; 					  (setq w (gr-get-edge-window-in-direction
+;; 							   (window-in-direction 'right (selected-window))
+;; 							   'below))
+;; 					  (when (> (window-body-height w) gr-buffer-body-height)
+;; 						(setq w (split-window w nil 'below)))))
+;; 				  w))))
+;; 	win))
+
+(defun gr-get-window-to-split (_w)
+  "for making eyes comfortable, `gr' prefer vertically align for making eyes moving
+the shorest distance and confident that `gr' will always appear in the same place"
+  (let* (split-width-threshold)
+	(cond ((one-window-p t)
+		   (split-window (selected-window) nil 'below))
+		  (t ;; more than one window
+		   (let* ((w (gr-get-edge-window-in-direction (selected-window) 'below)))
+			 (if (> (window-body-height w) gr-buffer-body-height)
+				 (split-window w nil 'below)
+			   w))))))
+
+(defun gr-get-edge-window-in-direction (w direction)
+  (let* ((win (window-in-direction direction w)))
+	(if (null win)
+		w
+	  (gr-get-edge-window-in-direction win direction))))
+
 (defun gr-display-buffer (buffer)
-  (let* ((split-window-preferred-function #'(lambda (window)
-											  (split-window window nil 'below))))
+  (let* ((split-window-preferred-function 'gr-get-window-to-split))
 	(display-buffer buffer `(nil (window-height . ,gr-buffer-height) (window-width . 0)))
 	(select-window (gr-window))
 	(gr-prevent-switching-other-window)))
 
 (defun gr-core (&optional prompt input source buffer)
+  (setq gr-current-window (selected-window))
   (gr-create-gr-buffer)
   (gr-window-config 'save)
   (setq gr-buffer (or buffer gr-buffer))
@@ -172,7 +210,8 @@
   (unwind-protect
 	  (gr-read-pattern prompt input)
 	(gr-cleanup))
-  (setq gr-pattern ""))
+  (setq gr-pattern "")
+  (setq gr-current-window nil))
 
 (defun gr-read-pattern (&optional prompt input)
   (with-gr-buffer
@@ -263,8 +302,8 @@
 
 (defun gr-core-search-in-list (source pattern)
   (let ((matched (cl-loop for s in source
-					  when (gr-core-is-str-match-pattern s pattern)
-					  collect s)))
+						  when (gr-core-is-str-match-pattern s pattern)
+						  collect s)))
 	matched))
 
 (defun gr-core-is-str-match-pattern (str pattern)
