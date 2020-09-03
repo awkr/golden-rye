@@ -177,9 +177,9 @@ the shorest distance and confident that `gr' will always appear in the same plac
 
 (defun gr-core (&optional prompt input source buffer)
   (setq gr-current-window (selected-window))
+  (setq gr-buffer (or buffer gr-buffer))
   (gr-create-gr-buffer)
   (gr-window-config 'save)
-  (setq gr-buffer (or buffer gr-buffer))
   (gr-display-buffer gr-buffer)
 
   (setq gr-source source)
@@ -229,9 +229,7 @@ the shorest distance and confident that `gr' will always appear in the same plac
 		 (when matches
 		   (erase-buffer)
 		   (gr-render-matches matches)
-		   ;; (gr-move-to-first-line)
-		   )
-		 )
+		   (gr-move-to-first-line)))
 	 (setq gr-in-update nil))))
 
 (defun gr-compute-matches (source)
@@ -264,7 +262,8 @@ the shorest distance and confident that `gr' will always appear in the same plac
    (let* ((candidates (split-string output "\n"))
 		  (matched (gr-core-search-in-list candidates gr-pattern)))
 	 (erase-buffer)
-	 (gr-render-matches matched))))
+	 (gr-render-matches matched)
+	 (gr-move-to-first-line))))
 
 (defun gr-render-matches (matches)
   (cl-loop for m in matches
