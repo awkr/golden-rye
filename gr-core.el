@@ -237,7 +237,8 @@ the shorest distance and confident that `gr' will always appear in the same plac
 		(gr-core-search-in-list candidates gr-pattern)))))
 
 (defun gr-get-candidates (source)
-  "retrieve and return the list of candidates from SOURCE, only return nil when source is async"
+  "retrieve and return the list of candidates from SOURCE.
+only return nil when source is async"
   (let* ((fn (assoc-default 'candidates source))
 		 (proc (assoc-default 'candidates-process source))
 		 (inhibit-quit proc)

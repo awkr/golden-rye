@@ -1,4 +1,4 @@
-;; search in current buffer
+;; gr-search-buffer.el --- search in current buffer
 
 (require 'gr-source)
 (require 'gr-core)
@@ -27,6 +27,8 @@
 (defconst gr-search-buffer-source
   (gr-make-source "gr-search-buffer" 'gr-source-sync
 	:candidates (gr-buffer-content)))
+
+;;; gr-search-buffer.el ends here
 
 ;; test
 (gr-search-buffer)
