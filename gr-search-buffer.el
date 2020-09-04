@@ -31,6 +31,8 @@
   (gr-make-source gr-search-buffer--source-name 'gr-source-sync
 	:candidates (gr-buffer-content)))
 
+(provide 'gr-search-buffer)
+
 ;;; gr-search-buffer.el ends here
 
 ;; test
