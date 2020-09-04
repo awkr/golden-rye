@@ -3,10 +3,13 @@
 (require 'gr-source)
 (require 'gr-core)
 
+(defconst gr-search-buffer--gr-buffer-name "*gr-search-buffer*")
+(defconst gr-search-buffer--source-name "gr-search-buffer")
+
 ;;;###autoload
 (defun gr-search-buffer ()
   (interactive)
-  (gr-core nil nil gr-search-buffer-source "*gr-search-buffer*"))
+  (gr-core nil nil gr-search-buffer-source gr-search-buffer--gr-buffer-name))
 
 (defun gr-buffer-get-line ()
   (let* ((beg (point))
@@ -25,7 +28,7 @@
 	(nreverse candidates)))
 
 (defconst gr-search-buffer-source
-  (gr-make-source "gr-search-buffer" 'gr-source-sync
+  (gr-make-source gr-search-buffer--source-name 'gr-source-sync
 	:candidates (gr-buffer-content)))
 
 ;;; gr-search-buffer.el ends here

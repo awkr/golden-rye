@@ -6,6 +6,7 @@
 (defconst gr-rg--gr-buffer-name "*gr-rg*")
 (defconst gr-rg--proc-name "*gr-rg--rg-proc*")
 (defconst gr-rg--proc-buffer-name "*gr-rg--rg-output*")
+(defconst gr-rg--source-name "gr-rg")
 
 (defun gr-rg-make-proc ()
   (let* ((proc (make-process :name gr-rg--proc-name
@@ -16,7 +17,7 @@
 	proc))
 
 (defconst gr-rg-proc-source
-  (gr-make-source "gr-rg" 'gr-source-async
+  (gr-make-source gr-rg--source-name 'gr-source-async
 	:candidates-process #'gr-rg-make-proc))
 
 ;; test
