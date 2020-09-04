@@ -220,21 +220,19 @@ the shorest distance and confident that `gr' will always appear in the same plac
 (defun gr-update ()
   (with-gr-buffer
    (unwind-protect
-	   (let* ((matches (gr-compute-matches gr-source)))
-		 (when matches
-		   (erase-buffer)
-		   (gr-render-matches matches)
-		   (gr-move-to-first-line)))
+	   (save-current-buffer
+		 (let* ((candidates (gr-get-candidates gr-source)))
+		   (cond ((null candidates) ;; async process, update in process filter
+				  )
+				 ((or (null gr-pattern) ;; show all candidates
+					  (zerop (length gr-pattern)))
+				  (erase-buffer)
+				  (gr-render-matches candidates))
+				 (t
+				  (let* ((matches (gr-core-search-in-list candidates gr-pattern)))
+					(erase-buffer)
+					(gr-render-matches matches))))))
 	 (setq gr-in-update nil))))
-
-(defun gr-compute-matches (source)
-  "start computing candidates in SOURCE"
-  (save-current-buffer
-	(let ((candidates (gr-get-candidates source)))
-	  (if (or (null gr-pattern)
-			  (zerop (length gr-pattern)))
-		  candidates
-		(gr-core-search-in-list candidates gr-pattern)))))
 
 (defun gr-get-candidates (source)
   "retrieve and return the list of candidates from SOURCE.
@@ -249,7 +247,7 @@ only return nil when source is async"
 		   (set-process-filter candidates 'gr-output-filter)
 		   (setq candidates nil))
 		  ((null candidates)
-		   '())
+		   '(""))
 		  (t candidates))))
 
 (defun gr-output-filter (process output)
@@ -258,20 +256,18 @@ only return nil when source is async"
    (let* ((candidates (split-string output "\n"))
 		  (matched (gr-core-search-in-list candidates gr-pattern)))
 	 (erase-buffer)
-	 (gr-render-matches matched)
-	 (gr-move-to-first-line))))
+	 (gr-render-matches matched))))
 
 (defun gr-render-matches (matches)
   (cl-loop for m in matches
-  		   do (gr-insert-match m)))
-
-(defun gr-insert-match (m)
-  (insert m "\n"))
+  		   do (insert m "\n"))
+  (gr-move-to-first-line))
 
 (defun gr-move-to-first-line ()
   "goto first line of `gr-buffer'"
   (goto-char (point-min))
-  (gr-mark-current-line))
+  (unless (equal (point-min) (point-max))
+	(gr-mark-current-line)))
 
 (defun gr-mark-current-line ()
   (with-gr-buffer
