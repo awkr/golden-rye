@@ -184,11 +184,6 @@ the shorest distance and confident that `gr' will always appear in the same plac
 
   (setq gr-source source)
 
-  ;; ;; display source at the very beginning
-  ;; (when (or (null input) (zerop (length input)))
-  ;; 	(gr-render)
-  ;; 	(gr-move-to-first-line))
-
   (unwind-protect
 	  (gr-read-pattern prompt input)
 	(gr-cleanup))
