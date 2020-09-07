@@ -6,6 +6,8 @@
 
 ;;; Code:
 
+(require 'cl-lib)
+(require 'subr-x)
 (require 'gr-proc)
 
 (defconst gr-buffer "*gr*")
@@ -13,11 +15,13 @@
 (defvar gr-current-window nil
   "current window where `gr' is invoked")
 (defvar gr-last-window-config nil)
-(defvar gr-buffer-height 8)
+(defvar gr-buffer-height 15)
 (defvar gr-pattern "")
 (defvar gr-source nil
   "a list of candidates")
 (defvar gr-in-update nil)
+(defvar gr--async-proc nil
+  "cons. car is proc, cdr is candidates")
 
 (defgroup gr nil
   ""
@@ -52,9 +56,12 @@
 
 (defun gr-forward-and-mark-line (linum)
   (with-gr-window
-   (unless (gr-edge-of-buffer-p linum)
-	 (forward-line linum)
-	 (gr-mark-current-line))))
+   (forward-line linum)
+   ;; (gr-mark-current-line)
+   ;; (unless (gr-edge-of-buffer-p linum)
+   ;; 	 (forward-line linum)
+   ;; 	 (gr-mark-current-line))
+   ))
 
 (defun gr-edge-of-buffer-p (n)
   "return non-nil if we are at EOB or BOB"
@@ -91,12 +98,16 @@
   :group 'gr :keymap gr-map)
 
 (cl-defun gr-prevent-switching-other-window (&key (enabled t))
-  (walk-windows
-   (lambda (w)
-	 (unless (window-dedicated-p w) (set-window-parameter w 'no-other-window enabled)))
-   0))
+  ;; (walk-windows
+  ;;  (lambda (w)
+  ;; 	 (unless (window-dedicated-p w) (set-window-parameter w 'no-other-window enabled)))
+  ;;  0)
+  )
 
 (defun gr-cleanup ()
+  (let* ((cleanup (assoc-default 'cleanup gr-source)))
+	(when cleanup
+	  (funcall cleanup)))
   (gr-prevent-switching-other-window :enabled nil)
   (gr-window-config 'restore))
 
@@ -192,6 +203,7 @@ the shorest distance and confident that `gr' will always appear in the same plac
 
 (defun gr-read-pattern (&optional prompt input)
   (with-gr-buffer
+   (setq gr-pattern input)
    (gr-update)
    (let* (timer)
 	 (unwind-protect
@@ -217,51 +229,140 @@ the shorest distance and confident that `gr' will always appear in the same plac
 		(setq gr-in-update t)
 		(gr-update)))))
 
-(defun gr-update ()
+;; (defun gr-update ()
+;;   (with-gr-buffer
+;;    (unwind-protect
+;; 	   (save-current-buffer
+;; 		 (let* ((candidates (gr-get-candidates gr-source)))
+;; 		   (cond ((null candidates) ;; async process, update in process filter
+;; 				  )
+;; 				 ((or (null gr-pattern) ;; show all candidates
+;; 					  (zerop (length gr-pattern)))
+;; 				  (erase-buffer)
+;; 				  (gr-render-matches candidates)
+;; 				  (goto-char (point-min)))
+;; 				 (t
+;; 				  (let* ((matches (gr-core-search-in-list candidates gr-pattern)))
+;; 					(erase-buffer)
+;; 					(gr-render-matches matches)
+;; 					(goto-char (point-min)))))))
+;; 	 (setq gr-in-update nil))))
+
+(cl-defun gr-update ()
   (with-gr-buffer
    (unwind-protect
 	   (save-current-buffer
-		 (let* ((candidates (gr-get-candidates gr-source)))
-		   (cond ((null candidates) ;; async process, update in process filter
-				  )
-				 ((or (null gr-pattern) ;; show all candidates
-					  (zerop (length gr-pattern)))
-				  (erase-buffer)
-				  (gr-render-matches candidates))
-				 (t
-				  (let* ((matches (gr-core-search-in-list candidates gr-pattern)))
+		 (let* ((fn (assoc-default 'candidates gr-source))
+				(proc (assoc-default 'candidates-process gr-source))
+				(checker (assoc-default 'check-before-compute gr-source)))
+		   (when (and checker
+					  (not (funcall checker)))
+			 ;; todo update mode line to show tips
+			 (gr-log "not enough chars")
+			 (cl-return-from gr-update)
+			 )
+		   (let* ((inhibit-quit proc)
+				  (candidates (if proc (funcall proc) fn)))
+			 (cond ((processp candidates)
+					(setq gr--async-proc (cons candidates nil))
+					;; candidates will be filtered in process filter
+					(set-process-filter candidates 'gr-output-filter))
+				   ((or (null gr-pattern) ;; show all candidates
+						(zerop (length gr-pattern)))
 					(erase-buffer)
-					(gr-render-matches matches))))))
+					(gr-render-matches candidates)
+					(goto-char (point-min)))
+				   (t
+					(let* ((matches (gr-core-search-in-list candidates gr-pattern)))
+					  (erase-buffer)
+					  (gr-render-matches matches)
+					  (goto-char (point-min))))))))
 	 (setq gr-in-update nil))))
 
-(defun gr-get-candidates (source)
-  "retrieve and return the list of candidates from SOURCE.
-only return nil when source is async"
-  (let* ((fn (assoc-default 'candidates source))
-		 (proc (assoc-default 'candidates-process source))
-		 (inhibit-quit proc)
-		 (candidates (if proc (funcall proc)
-					   fn)))
-	(cond ((processp candidates)
-		   ;; candidates will be filtered in process filter
-		   (set-process-filter candidates 'gr-output-filter)
-		   (setq candidates nil))
-		  ((null candidates)
-		   '(""))
-		  (t candidates))))
+;; (defun gr-get-candidates (source)
+;;   "retrieve and return the list of candidates from SOURCE.
+;; only return nil when source is async"
+;;   (let* ((fn (assoc-default 'candidates source))
+;; 		 (proc (assoc-default 'candidates-process source))
+;; 		 (inhibit-quit proc)
+;; 		 (candidates (if proc (funcall proc)
+;; 		 			   fn))
+;; 		 )
+;; 	(cond ((processp candidates)
+;; 		   (setq gr-last-async-proc gr-current-async-proc
+;; 				 gr-current-async-proc (cons candidates nil))
+;; 		   ;; candidates will be filtered in process filter
+;; 		   (set-process-filter candidates 'gr-output-filter)
+;; 		   (setq candidates nil))
+;; 		  ((null candidates)
+;; 		   '(""))
+;; 		  (t candidates))
+;; 	)
+;;   )
 
-(defun gr-output-filter (process output)
-  "the `process-filter' function for gr async source"
+(defun gr-output-filter (proc output)
+  "the `process-filter' function for gr async source.
+note: this may be called multi times when process returns serval times"
+  (let* ((incoming (split-string (string-trim output) "\n")))
+	(cond ((eq proc (car gr--async-proc))
+		   (gr-log "output filter")
+		   (setcdr gr--async-proc (append (cdr gr--async-proc) incoming)))))
+
+  ;; (with-gr-buffer
+  ;;  (let* ((incoming (split-string (string-trim output) "\n")))
+  ;; 	 ;; if current proc: 1 append candidates 2 delete last proc
+  ;; 	 ;; if last proc: 1 append candidates
+  ;; 	 (cond ((eq proc (car gr-current-async-proc))
+  ;; 			(let* ((existing (cdr gr-current-async-proc)))
+  ;; 			  (setcdr gr-current-async-proc (append existing incoming))
+  ;; 			  (if (> (length existing) 0)
+  ;; 				  (progn
+  ;; 					(gr-log "--> append")
+  ;; 					(save-excursion
+  ;; 					  (goto-char (point-max))
+  ;; 					  (gr-render-matches incoming)
+  ;; 					  )
+  ;; 					(gr-log "--> append done"))
+  ;; 				(gr-log "--> erase")
+  ;; 				(unless (eq (point-min) (point-max))
+  ;; 				  (erase-buffer))
+  ;; 				(gr-log "about to render")
+  ;; 				(gr-render-matches incoming)
+  ;; 				(gr-log "render done")
+  ;; 				(goto-char (point-min))
+  ;; 				(gr-log "go to first line")
+  ;; 				)
+  ;; 			  )
+  ;; 			(setq gr-last-async-proc nil)
+  ;; 			)
+  ;; 		   ((and gr-last-async-proc
+  ;; 				 (eq proc (car gr-last-async-proc))))
+  ;; 		   (let* ((existing (cdr gr-last-async-proc)))
+  ;; 			 (setcdr gr-last-async-proc (append existing incoming))))))
+  )
+
+(defun gr-core-process-sentinel (proc status)
+  "为防止process多次返回造成Emacs闪烁，以及为了提供稳定的用户体验，`gr'会一次性返回process的执行结果。process的性能由process负责，实际上，对于如rg之类的程序，在大多数项目中性能（用户等待搜索返回的时间）几乎没有影响"
+  (gr-log (format "proc status: %s" status))
+  (when (eq proc (car gr--async-proc))
+	(cond ((equal status "finished\n")
+		   (gr-rg-process-output (cdr gr--async-proc)))
+		  ((string-prefix-p "exited abnormally" status)
+		   ;; todo update mode line
+		   ))))
+
+(defun gr-rg-process-output (output)
+  "为减少一次for循环，在遍历处理输出的同时刷新buffer"
   (with-gr-buffer
-   (let* ((candidates (split-string output "\n"))
-		  (matched (gr-core-search-in-list candidates gr-pattern)))
+   (let* ((render-fn (assoc-default 'render-line gr-source)))
 	 (erase-buffer)
-	 (gr-render-matches matched))))
+	 (cl-loop for line in output
+			  do (let* ((ln (funcall render-fn line)))
+				   (when ln (insert ln "\n")))))))
 
 (defun gr-render-matches (matches)
   (cl-loop for m in matches
-  		   do (insert m "\n"))
-  (gr-move-to-first-line))
+		   do (insert m "\n")))
 
 (defun gr-move-to-first-line ()
   "goto first line of `gr-buffer'"
@@ -291,6 +392,15 @@ only return nil when source is async"
   			   (setq idx (string-match p str idx))))
   	(if (not idx) nil
 	  t)))
+
+(defun gr-log (fmtstr &rest args)
+  (with-current-buffer (get-buffer-create "*gr-debug-log*")
+	(outline-mode)
+	(buffer-disable-undo)
+	(let ((inhibit-read-only t))
+	  (goto-char (point-max))
+	  (insert (apply #'format (cons fmtstr args)) "\n")
+	  (goto-char (point-max)))))
 
 (defun gr-get-git-root ()
   (gr-proc-output "/usr/local/bin/git" "rev-parse" "--show-toplevel"))

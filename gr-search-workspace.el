@@ -1,4 +1,6 @@
-;; search in current workspace
+;;; gr-search-buffer.el --- search in current workspace
+
+;;; Code:
 
 (require 'gr-source)
 (require 'gr-core)
@@ -7,18 +9,71 @@
 (defconst gr-rg--proc-name "*gr-rg--rg-proc*")
 (defconst gr-rg--proc-buffer-name "*gr-rg--rg-output*")
 (defconst gr-rg--source-name "gr-rg")
+(defconst gr-rg--exe-file "/usr/local/bin/rg")
+
+(defcustom gr-rg--input-min-chars 3
+  "rg will not be invoked unless the input is at least this many chars"
+  :type 'integer)
+
+(defvar gr-rg--proc nil
+  "current rg process, uesd to kill before rising a new one")
+
+;; customizations
+
+(defgroup gr-rg nil
+  "group for `gr-rg' customizations")
+
+(defface gr-rg-file-face
+  '((t (:underline t)))
+  "face for the file when displaying matches in the `gr-buffer'"
+  :group 'gr-rg)
+
+(defun gr-rg--make-face (face str)
+  (apply #'propertize (append (list str) `(face ,face))))
 
 (defun gr-rg-make-proc ()
-  (let* ((proc (make-process :name gr-rg--proc-name
+  ;; kill old proc to get the newest result as soon as possible
+  (gr-rg--cleanup)
+
+  (let* ((dir "/Users/blue/envzo/zefram")
+		 (input gr-pattern)
+		 (proc (make-process :name gr-rg--proc-name
 							 :buffer gr-rg--proc-buffer-name
-							 :command '("echo" "\"hello\nworld\"")
+							 :command `(,gr-rg--exe-file "-i" "--color" "never" ,input ,dir)
+							 :sentinel #'gr-core-process-sentinel
 							 :noquery t)))
 	(set-process-query-on-exit-flag proc nil)
+	(setq gr-rg--proc proc)
 	proc))
+
+(defun gr-rg--check-before-compute ()
+  (if (> (length gr-pattern) 2)
+	  t
+	nil))
+
+(defun gr-rg--render-line (line)
+  (cond ((string-prefix-p "/" line) ;; for simplicity and speed, use this expr to detech file
+		 (gr-rg--make-face 'gr-rg-file-face line))
+		((> (length line) 0)
+		 line)
+		(t
+		 nil)))
+
+(defun gr-rg--cleanup ()
+  (when (and gr-rg--proc
+  			 (process-live-p gr-rg--proc))
+  	(kill-process gr-rg--proc)
+  	(setq gr-rg--proc nil)))
 
 (defconst gr-rg-proc-source
   (gr-make-source gr-rg--source-name 'gr-source-async
-	:candidates-process #'gr-rg-make-proc))
+	:candidates-process #'gr-rg-make-proc
+	:check-before-compute #'gr-rg--check-before-compute
+	:render-line #'gr-rg--render-line
+	:cleanup #'gr-rg--cleanup))
+
+;;; gr-search-workspace.el ends here
 
 ;; test
-(gr-core nil nil gr-rg-proc-source gr-rg--gr-buffer-name)
+
+(gr-core nil "doesstr" gr-rg-proc-source gr-rg--gr-buffer-name)

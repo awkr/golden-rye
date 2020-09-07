@@ -7,10 +7,20 @@
 	:initarg :name
 	:initform nil
 	:custom string)
+   (check-before-compute
+	:initarg :check-before-compute
+	:initform nil
+	:custom function
+	:documentation
+	"计算candidates之前的校验，如：只有输入达到一定长度时，`gr-rg'才会执行")
    (candidates
 	:initarg :candidates
 	:initform nil
-	:custom list))
+	:custom list)
+   (render-line
+	:initarg :render-line
+	:initform nil
+	:custom function))
   :abstract t)
 
 (defclass gr-source-sync (gr-source)
@@ -20,6 +30,10 @@
 (defclass gr-source-async (gr-source)
   ((candidates-process
 	:initarg :candidates-process
+	:initform nil
+	:custom function)
+   (cleanup:
+	:initarg :cleanup
 	:initform nil
 	:custom function)))
 

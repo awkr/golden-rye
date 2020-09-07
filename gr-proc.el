@@ -1,6 +1,6 @@
 (defun gr-proc-output (exe &rest args)
   (with-temp-buffer
-	(let ((proc (make-process :name "*temp-gr-proc-name*"
+	(let ((proc (make-process :name "*gr-temp-proc*"
 							  :buffer (current-buffer)
 							  :command `(,exe ,@args)
 							  :noquery t
