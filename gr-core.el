@@ -9,6 +9,8 @@
 (require 'cl-lib)
 (require 'subr-x)
 (require 'gr-proc)
+(require 'gr-log)
+(require 'gr-string)
 
 (defconst gr-buffer "*gr*")
 
@@ -275,7 +277,7 @@ the shorest distance and confident that `gr' will always appear in the same plac
 					(gr-render-matches candidates)
 					(goto-char (point-min)))
 				   (t
-					(let* ((matches (gr-core-search-in-list candidates gr-pattern)))
+					(let* ((matches (gr-search-list candidates gr-pattern)))
 					  (erase-buffer)
 					  (gr-render-matches matches)
 					  (goto-char (point-min))))))))
@@ -327,48 +329,6 @@ note: this may be called multi times when process returns serval times"
 (defun gr-mark-current-line ()
   (with-gr-buffer
    (move-overlay gr-selection-overlay (point-at-bol) (1+ (point-at-eol)))))
-
-(defun gr-core-search-in-list (source pattern)
-  (let ((matched (cl-loop for s in source
-						  when (gr-core-is-str-match-pattern s pattern)
-						  collect s)))
-	matched))
-
-(defun gr-core-is-str-match-pattern (str pattern)
-  ;; if matches return t, otherwise return nil
-  ;; 按照空格拆分出各匹配项，再逐个比较
-  (let* ((idx 0)
-  		 (patterns (split-string pattern " ")))
-  	(cl-loop for p in patterns
-  			 when (not (string= p ""))
-  			 do
-  			 (when (not (null idx))
-  			   (setq idx (string-match p str idx))))
-  	(if (not idx) nil
-	  t)))
-
-(defun gr-log (fmtstr &rest args)
-  (with-current-buffer (get-buffer-create "*gr-debug-log*")
-	(outline-mode)
-	(buffer-disable-undo)
-	(let ((inhibit-read-only t))
-	  (goto-char (point-max))
-	  (insert (apply #'format (cons fmtstr args)) "\n")
-	  (goto-char (point-max)))))
-
-(defun gr-get-git-root ()
-  (gr-proc-output "/usr/local/bin/git" "rev-parse" "--show-toplevel"))
-
-(defun gr-core-valid-regexp-p (expr)
-  "return nil if expr is valid, otherwise return the error"
-  (condition-case err
-      (progn
-        (string-match-p expr "")
-        nil)
-	(invalid-regexp
-	 err)))
-
-(gr-core-valid-regexp-p "ab\\(")
 
 (provide 'gr-core)
 

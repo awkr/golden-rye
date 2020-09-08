@@ -82,8 +82,3 @@
 ;; test
 
 (gr-core nil "doesstrmatches\\(" gr-rg-proc-source gr-rg--gr-buffer-name)
-;; (let* ((input "doesstrmatches\\(s")
-;; 	   (proc (make-process :name "test"
-;; 						   :buffer (current-buffer)
-;; 						   :command `("rg" "-i" ,input "/Users/blue/envzo/zefram/internal/"))))
-;;   )

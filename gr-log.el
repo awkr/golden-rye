@@ -1,0 +1,10 @@
+(defun gr-log (fmtstr &rest args)
+  (with-current-buffer (get-buffer-create "*gr-debug-log*")
+	(outline-mode)
+	(buffer-disable-undo)
+	(let ((inhibit-read-only t))
+	  (goto-char (point-max))
+	  (insert (apply #'format (cons fmtstr args)) "\n")
+	  (goto-char (point-max)))))
+
+(provide 'gr-log)

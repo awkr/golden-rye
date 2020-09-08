@@ -9,6 +9,7 @@
 	  (while (accept-process-output proc nil nil t)))
 	(buffer-string)))
 
-(defun gr-output-filter ())
+(defun gr-git-root ()
+  (gr-proc-output "/usr/local/bin/git" "rev-parse" "--show-toplevel"))
 
 (provide 'gr-proc)
