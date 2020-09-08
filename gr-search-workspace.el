@@ -11,10 +11,8 @@
 (defconst gr-rg--source-name "gr-rg")
 (defconst gr-rg--exe-file "/usr/local/bin/rg")
 
-(defcustom gr-rg--input-min-chars 3
-  "rg will not be invoked unless the input is at least this many chars"
-  :type 'integer)
-
+(defvar gr-rg--min-char-num 3
+  "rg will not be invoked unless the input is at least this many chars")
 (defvar gr-rg--proc nil
   "current rg process, uesd to kill before rising a new one")
 
@@ -39,17 +37,24 @@
 		 (input gr-pattern)
 		 (proc (make-process :name gr-rg--proc-name
 							 :buffer gr-rg--proc-buffer-name
-							 :command `(,gr-rg--exe-file "-i" "--color" "never" ,input ,dir)
+							 :command `(,gr-rg--exe-file "-S" "-i" "--color" "never" ,input ,dir)
 							 :sentinel #'gr-core-process-sentinel
 							 :noquery t)))
 	(set-process-query-on-exit-flag proc nil)
 	(setq gr-rg--proc proc)
 	proc))
 
-(defun gr-rg--check-before-compute ()
-  (if (> (length gr-pattern) 2)
-	  t
-	nil))
+(defun gr-rg--check-before-compute (pattern)
+  (cond ((< (length pattern) gr-rg--min-char-num)
+		 (user-error "not enough chars: min %d" gr-rg--min-char-num))
+	    (t
+		 ;; because Emacs regexp is not compatiable with PRCE regexp which maybe
+		 ;; the most widely known engine, familiar to most developers
+		 ;; so `gr' gives up validating input, leave this to `rg' :)
+
+		 ;; (let* ((err (gr-core-valid-regexp-p pattern)))
+		 ;;   (when err (user-error (error-message-string err))))
+		 )))
 
 (defun gr-rg--render-line (line)
   (cond ((string-prefix-p "/" line) ;; for simplicity and speed, use this expr to detech file
@@ -76,4 +81,9 @@
 
 ;; test
 
-(gr-core nil "doesstr" gr-rg-proc-source gr-rg--gr-buffer-name)
+(gr-core nil "doesstrmatches\\(" gr-rg-proc-source gr-rg--gr-buffer-name)
+;; (let* ((input "doesstrmatches\\(s")
+;; 	   (proc (make-process :name "test"
+;; 						   :buffer (current-buffer)
+;; 						   :command `("rg" "-i" ,input "/Users/blue/envzo/zefram/internal/"))))
+;;   )

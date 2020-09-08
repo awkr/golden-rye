@@ -254,13 +254,15 @@ the shorest distance and confident that `gr' will always appear in the same plac
 	   (save-current-buffer
 		 (let* ((fn (assoc-default 'candidates gr-source))
 				(proc (assoc-default 'candidates-process gr-source))
-				(checker (assoc-default 'check-before-compute gr-source)))
-		   (when (and checker
-					  (not (funcall checker)))
-			 ;; todo update mode line to show tips
-			 (gr-log "not enough chars")
-			 (cl-return-from gr-update)
-			 )
+				(checker-fn (assoc-default 'check-before-compute gr-source)))
+		   (when checker-fn
+			 (condition-case err
+				 (funcall checker-fn gr-pattern)
+			   (error
+				(gr-log "check failed: %s" (error-message-string err))
+				;; todo update mode line to show tips
+				(cl-return-from gr-update)
+				)))
 		   (let* ((inhibit-quit proc)
 				  (candidates (if proc (funcall proc) fn)))
 			 (cond ((processp candidates)
@@ -279,67 +281,12 @@ the shorest distance and confident that `gr' will always appear in the same plac
 					  (goto-char (point-min))))))))
 	 (setq gr-in-update nil))))
 
-;; (defun gr-get-candidates (source)
-;;   "retrieve and return the list of candidates from SOURCE.
-;; only return nil when source is async"
-;;   (let* ((fn (assoc-default 'candidates source))
-;; 		 (proc (assoc-default 'candidates-process source))
-;; 		 (inhibit-quit proc)
-;; 		 (candidates (if proc (funcall proc)
-;; 		 			   fn))
-;; 		 )
-;; 	(cond ((processp candidates)
-;; 		   (setq gr-last-async-proc gr-current-async-proc
-;; 				 gr-current-async-proc (cons candidates nil))
-;; 		   ;; candidates will be filtered in process filter
-;; 		   (set-process-filter candidates 'gr-output-filter)
-;; 		   (setq candidates nil))
-;; 		  ((null candidates)
-;; 		   '(""))
-;; 		  (t candidates))
-;; 	)
-;;   )
-
 (defun gr-output-filter (proc output)
   "the `process-filter' function for gr async source.
 note: this may be called multi times when process returns serval times"
-  (let* ((incoming (split-string (string-trim output) "\n")))
-	(cond ((eq proc (car gr--async-proc))
-		   (gr-log "output filter")
-		   (setcdr gr--async-proc (append (cdr gr--async-proc) incoming)))))
-
-  ;; (with-gr-buffer
-  ;;  (let* ((incoming (split-string (string-trim output) "\n")))
-  ;; 	 ;; if current proc: 1 append candidates 2 delete last proc
-  ;; 	 ;; if last proc: 1 append candidates
-  ;; 	 (cond ((eq proc (car gr-current-async-proc))
-  ;; 			(let* ((existing (cdr gr-current-async-proc)))
-  ;; 			  (setcdr gr-current-async-proc (append existing incoming))
-  ;; 			  (if (> (length existing) 0)
-  ;; 				  (progn
-  ;; 					(gr-log "--> append")
-  ;; 					(save-excursion
-  ;; 					  (goto-char (point-max))
-  ;; 					  (gr-render-matches incoming)
-  ;; 					  )
-  ;; 					(gr-log "--> append done"))
-  ;; 				(gr-log "--> erase")
-  ;; 				(unless (eq (point-min) (point-max))
-  ;; 				  (erase-buffer))
-  ;; 				(gr-log "about to render")
-  ;; 				(gr-render-matches incoming)
-  ;; 				(gr-log "render done")
-  ;; 				(goto-char (point-min))
-  ;; 				(gr-log "go to first line")
-  ;; 				)
-  ;; 			  )
-  ;; 			(setq gr-last-async-proc nil)
-  ;; 			)
-  ;; 		   ((and gr-last-async-proc
-  ;; 				 (eq proc (car gr-last-async-proc))))
-  ;; 		   (let* ((existing (cdr gr-last-async-proc)))
-  ;; 			 (setcdr gr-last-async-proc (append existing incoming))))))
-  )
+  (when (eq proc (car gr--async-proc))
+	(gr-log "output filter")
+	(setcdr gr--async-proc (append (cdr gr--async-proc) `(,(string-trim output))))))
 
 (defun gr-core-process-sentinel (proc status)
   "为防止process多次返回造成Emacs闪烁，以及为了提供稳定的用户体验，`gr'会一次性返回process的执行结果。process的性能由process负责，实际上，对于如rg之类的程序，在大多数项目中性能（用户等待搜索返回的时间）几乎没有影响"
@@ -348,17 +295,24 @@ note: this may be called multi times when process returns serval times"
 	(cond ((equal status "finished\n")
 		   (gr-rg-process-output (cdr gr--async-proc)))
 		  ((string-prefix-p "exited abnormally" status)
-		   ;; todo update mode line
-		   ))))
+		   ;; extract error message, there is totally hard code
+		   (let* ((lines (split-string (car (last (cdr gr--async-proc))) "\n")))
+			 (when (eq (length lines) 4)
+			   ;; todo update mode line
+			   (gr-log (concat (car lines)
+							   (string-trim-left (car (last lines)) "error:")))
+			   ))))))
 
 (defun gr-rg-process-output (output)
   "为减少一次for循环，在遍历处理输出的同时刷新buffer"
   (with-gr-buffer
    (let* ((render-fn (assoc-default 'render-line gr-source)))
 	 (erase-buffer)
-	 (cl-loop for line in output
-			  do (let* ((ln (funcall render-fn line)))
-				   (when ln (insert ln "\n")))))))
+	 (cl-loop for batch in output
+			  for lines = (split-string batch "\n")
+			  do (cl-loop for line in lines
+						  do (let* ((ln (funcall render-fn line)))
+							   (when ln (insert ln "\n"))))))))
 
 (defun gr-render-matches (matches)
   (cl-loop for m in matches
@@ -404,6 +358,17 @@ note: this may be called multi times when process returns serval times"
 
 (defun gr-get-git-root ()
   (gr-proc-output "/usr/local/bin/git" "rev-parse" "--show-toplevel"))
+
+(defun gr-core-valid-regexp-p (expr)
+  "return nil if expr is valid, otherwise return the error"
+  (condition-case err
+      (progn
+        (string-match-p expr "")
+        nil)
+	(invalid-regexp
+	 err)))
+
+(gr-core-valid-regexp-p "ab\\(")
 
 (provide 'gr-core)
 
