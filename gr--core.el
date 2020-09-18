@@ -1,5 +1,3 @@
-;; Copyright (C) 2020 Hongjian Zhu <zhu.life@gmail.com>
-
 ;; gr means Golden Rye, in Chinese: 金色麦田
 
 (require 'cl-lib)
