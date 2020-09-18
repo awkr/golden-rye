@@ -1,16 +1,9 @@
-;;; gr-core.el --- kernal of gr. -*- lexical-binding: t -*-
-
 ;; Copyright (C) 2020 Hongjian Zhu <zhu.life@gmail.com>
 
 ;; gr means Golden Rye, in Chinese: 金色麦田
 
-;;; Code:
-
 (require 'cl-lib)
 (require 'subr-x)
-(require 'gr-proc)
-(require 'gr-log)
-(require 'gr-string)
 
 (defconst gr-buffer "*gr*")
 
@@ -277,7 +270,7 @@ the shorest distance and confident that `gr' will always appear in the same plac
 					(gr-render-matches candidates)
 					(goto-char (point-min)))
 				   (t
-					(let* ((matches (gr-search-list candidates gr-pattern)))
+					(let* ((matches (gr-list-match-pattern candidates gr-pattern)))
 					  (erase-buffer)
 					  (gr-render-matches matches)
 					  (goto-char (point-min))))))))
@@ -290,20 +283,22 @@ note: this may be called multi times when process returns serval times"
 	(gr-log "output filter")
 	(setcdr gr--async-proc (append (cdr gr--async-proc) `(,(string-trim output))))))
 
-(defun gr-core-process-sentinel (proc status)
+(cl-defun gr-process-sentinel (proc status)
   "为防止process多次返回造成Emacs闪烁，以及为了提供稳定的用户体验，`gr'会一次性返回process的执行结果。process的性能由process负责，实际上，对于如rg之类的程序，在大多数项目中性能（用户等待搜索返回的时间）几乎没有影响"
+  (unless (eq proc (car gr--async-proc)) (cl-return-form gr-process-sentinel))
   (gr-log (format "proc status: %s" status))
-  (when (eq proc (car gr--async-proc))
-	(cond ((equal status "finished\n")
-		   (gr-rg-process-output (cdr gr--async-proc)))
-		  ((string-prefix-p "exited abnormally" status)
-		   ;; extract error message, there is totally hard code
-		   (let* ((lines (split-string (car (last (cdr gr--async-proc))) "\n")))
-			 (when (eq (length lines) 4)
-			   ;; todo update mode line
-			   (gr-log (concat (car lines)
-							   (string-trim-left (car (last lines)) "error:")))
-			   ))))))
+  (cond ((equal status "finished\n")
+		 (gr-rg-process-output (cdr gr--async-proc)))
+		((string-prefix-p "exited abnormally" status)
+		 ;; extract error message, totally hard code
+		 ;; todo update mode line
+		 (let* ((last-message (car (last (cdr gr--async-proc)))))
+		   (if last-message
+			   (let* ((lines (split-string last-message "\n")))
+				 (when (eq (length lines) 4)
+				   (gr-log (concat (car lines)
+								   (string-trim-left (car (last lines)) "error:")))))
+			 (gr-log "not found"))))))
 
 (defun gr-rg-process-output (output)
   "为减少一次for循环，在遍历处理输出的同时刷新buffer"
@@ -330,6 +325,64 @@ note: this may be called multi times when process returns serval times"
   (with-gr-buffer
    (move-overlay gr-selection-overlay (point-at-bol) (1+ (point-at-eol)))))
 
-(provide 'gr-core)
+(defun gr-workspace ()
+  "if current directory is a git project, return project path,
+otherwise `default-directory'"
+  (let* ((path (gr-proc-output "/usr/local/bin/git" "rev-parse" "--show-toplevel")))
+	(if (eq (car path) 0)
+		(string-trim (cdr path))
+	  default-directory)))
 
-;;; gr-core.el ends here
+(defun gr-proc-output (exe &rest args)
+  "(exit-code . output)"
+  (let (exit-code)
+	(with-temp-buffer
+	  (let ((proc (make-process :name "*gr-temp-proc*"
+								:buffer (current-buffer)
+								:command `(,exe ,@args)
+								:noquery t
+								:sentinel #'ignore)))
+		(set-process-query-on-exit-flag proc nil)
+		(while (accept-process-output proc nil nil t))
+		(setq exit-code (process-exit-status proc)))
+	  (cons exit-code (buffer-string)))))
+
+(defun gr-log (fmtstr &rest args)
+  (with-current-buffer (get-buffer-create "*gr-debug-log*")
+	(outline-mode)
+	(buffer-disable-undo)
+	(let ((inhibit-read-only t))
+	  (goto-char (point-max))
+	  (insert (apply #'format (cons fmtstr args)) "\n")
+	  (goto-char (point-max)))))
+
+(defun gr-string-match-p (str pattern)
+  "return t if STR matches PATTERN, otherwise return nil"
+  ;; 按照空格拆分出各匹配项，再逐个比较
+  (let* ((idx 0)
+  		 (patterns (split-string pattern " ")))
+  	(cl-loop for p in patterns
+  			 when (not (string= p ""))
+  			 do
+  			 (when (not (null idx))
+  			   (setq idx (string-match p str idx))))
+  	(if (not idx) nil
+	  t)))
+
+(defun gr-list-match-pattern (strlist pattern)
+  "return a list in which each item is a string matches PATTERN"
+  (let ((matched (cl-loop for s in strlist
+						  when (gr-string-match-p s pattern)
+						  collect s)))
+	matched))
+
+(defun gr-regexp-valid-p (expr)
+  "return nil if expr is valid, otherwise return the error"
+  (condition-case err
+      (progn
+        (string-match-p expr "")
+        nil)
+	(invalid-regexp
+	 err)))
+
+(provide 'gr--core)

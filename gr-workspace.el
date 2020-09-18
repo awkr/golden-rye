@@ -1,15 +1,13 @@
-;;; gr-search-buffer.el --- search in current workspace
+;; search in current workspace
 
-;;; Code:
-
-(require 'gr-source)
-(require 'gr-core)
+(require 'gr--source)
+(require 'gr--core)
 
 (defconst gr-rg--gr-buffer-name "*gr-rg*")
 (defconst gr-rg--proc-name "*gr-rg--rg-proc*")
 (defconst gr-rg--proc-buffer-name "*gr-rg--rg-output*")
 (defconst gr-rg--source-name "gr-rg")
-(defconst gr-rg--exe-file "/usr/local/bin/rg")
+(defconst gr-rg--binary "/usr/local/bin/rg")
 
 (defvar gr-rg--min-char-num 3
   "rg will not be invoked unless the input is at least this many chars")
@@ -33,12 +31,11 @@
   ;; kill old proc to get the newest result as soon as possible
   (gr-rg--cleanup)
 
-  (let* ((dir "/Users/blue/envzo/zefram")
-		 (input gr-pattern)
+  (let* ((input gr-pattern)
 		 (proc (make-process :name gr-rg--proc-name
 							 :buffer gr-rg--proc-buffer-name
-							 :command `(,gr-rg--exe-file "-S" "-i" "--color" "never" ,input ,dir)
-							 :sentinel #'gr-core-process-sentinel
+							 :command `(,gr-rg--binary "-S" "-i" "--color" "never" ,input ,(gr-workspace))
+							 :sentinel #'gr-process-sentinel
 							 :noquery t)))
 	(set-process-query-on-exit-flag proc nil)
 	(setq gr-rg--proc proc)
@@ -77,8 +74,5 @@
 	:render-line #'gr-rg--render-line
 	:cleanup #'gr-rg--cleanup))
 
-;;; gr-search-workspace.el ends here
-
 ;; test
-
 (gr-core nil "doesstrmatches\\(" gr-rg-proc-source gr-rg--gr-buffer-name)
