@@ -2,8 +2,6 @@
 
 ;; Copyright (C) 2020 Hongjian Zhu <zhu.life@gmail.com>
 
-;; Version: 20200919
-
 (require 'gr-source)
 (require 'gr-core)
 

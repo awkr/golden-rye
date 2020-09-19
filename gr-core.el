@@ -13,8 +13,10 @@
 (defvar gr-source nil
   "a list of candidates")
 (defvar gr-in-update nil)
-(defvar gr--async-proc nil
+
+(defvar gr--proc nil
   "cons. car is proc, cdr is candidates")
+(defvar gr--proc-timeout-thread nil)
 
 (defgroup gr nil
   ""
@@ -33,6 +35,10 @@
 
 (defun gr-keyboard-quit ()
   (interactive)
+  (when gr--proc
+	(let* ((proc (car gr--proc)))
+	  (set-process-filter proc nil)
+	  (delete-process proc)))
   (abort-recursive-edit))
 
 (defun gr-keyboard-enter ()
@@ -224,81 +230,83 @@ the shorest distance and confident that `gr' will always appear in the same plac
 		(setq gr-in-update t)
 		(gr-update)))))
 
-;; (defun gr-update ()
-;;   (with-gr-buffer
-;;    (unwind-protect
-;; 	   (save-current-buffer
-;; 		 (let* ((candidates (gr-get-candidates gr-source)))
-;; 		   (cond ((null candidates) ;; async process, update in process filter
-;; 				  )
-;; 				 ((or (null gr-pattern) ;; show all candidates
-;; 					  (zerop (length gr-pattern)))
-;; 				  (erase-buffer)
-;; 				  (gr-render-matches candidates)
-;; 				  (goto-char (point-min)))
-;; 				 (t
-;; 				  (let* ((matches (gr-core-search-in-list candidates gr-pattern)))
-;; 					(erase-buffer)
-;; 					(gr-render-matches matches)
-;; 					(goto-char (point-min)))))))
-;; 	 (setq gr-in-update nil))))
-
 (cl-defun gr-update ()
   (with-gr-buffer
    (unwind-protect
-	   (save-current-buffer
-		 (let* ((fn (assoc-default 'candidates gr-source))
-				(proc (assoc-default 'candidates-process gr-source))
-				(checker-fn (assoc-default 'check-before-compute gr-source)))
-		   (when checker-fn
-			 (condition-case err
-				 (funcall checker-fn gr-pattern)
-			   (error
-				(gr-log "check failed: %s" (error-message-string err))
-				;; todo update mode line to show tips
-				(cl-return-from gr-update)
-				)))
-		   (let* ((inhibit-quit proc)
-				  (candidates (if proc (funcall proc) fn)))
-			 (cond ((processp candidates)
-					(setq gr--async-proc (cons candidates nil))
-					;; candidates will be filtered in process filter
-					(set-process-filter candidates 'gr-output-filter))
-				   ((or (null gr-pattern) ;; show all candidates
-						(zerop (length gr-pattern)))
-					(erase-buffer)
-					(gr-render-matches candidates)
-					(goto-char (point-min)))
-				   (t
-					(let* ((matches (gr-list-match-pattern candidates gr-pattern)))
-					  (erase-buffer)
-					  (gr-render-matches matches)
-					  (goto-char (point-min))))))))
+	   (let* ((fn (assoc-default 'candidates gr-source))
+			  (procfn (assoc-default 'candidates-process gr-source))
+			  (checker-fn (assoc-default 'check-before-compute gr-source)))
+		 (when checker-fn
+		   (condition-case err
+			   (funcall checker-fn gr-pattern)
+			 (error
+			  (gr-log "check failed: %s" (error-message-string err))
+			  ;; todo update mode line to show tips
+			  (cl-return-from gr-update)
+			  )))
+		 (let* ((candidates (if procfn
+								(funcall procfn)
+							  fn)))
+		   (cond ((processp candidates)
+				  (setq gr--proc (cons candidates nil))
+				  ;; candidates will be filtered in process filter
+				  (set-process-filter candidates 'gr-output-filter)
+				  (setq gr--proc-timeout-thread (make-thread (lambda ()
+															   (sleep-for 5)
+															   (when (and gr--proc
+																		  (process-live-p (car gr--proc)))
+																 (gr-log "process timeout, kill it")
+																 (kill-process (car gr--proc)))))))
+				 ((or (null gr-pattern) ;; show all candidates
+					  (zerop (length gr-pattern)))
+				  (gr-render candidates))
+				 (t
+				  (let* ((matches (gr-list-match-pattern candidates gr-pattern)))
+					(gr-render matches))))))
 	 (setq gr-in-update nil))))
+
+(defun gr-render (candidates)
+  (erase-buffer)
+  (gr-render-matches candidates)
+  (goto-char (point-min)))
 
 (defun gr-output-filter (proc output)
   "the `process-filter' function for gr async source.
 note: this may be called multi times when process returns serval times"
-  (when (eq proc (car gr--async-proc))
+  (when (eq proc (car gr--proc))
 	(gr-log "output filter")
-	(setcdr gr--async-proc (append (cdr gr--async-proc) `(,(string-trim output))))))
+	(setcdr gr--proc (append (cdr gr--proc) `(,(string-trim output))))))
 
 (cl-defun gr-process-sentinel (proc status)
   "为防止process多次返回造成Emacs闪烁，以及为了提供稳定的用户体验，`gr'会一次性返回process的执行结果。process的性能由process负责，实际上，对于如rg之类的程序，在大多数项目中性能（用户等待搜索返回的时间）几乎没有影响"
-  (unless (eq proc (car gr--async-proc)) (cl-return-form gr-process-sentinel))
+  (unless (eq proc (car gr--proc)) (cl-return-form gr-process-sentinel))
   (gr-log (format "proc status: %s" status))
   (cond ((equal status "finished\n")
-		 (gr-rg-process-output (cdr gr--async-proc)))
+		 (gr-cancel-timeout)
+		 (let* ((message (cdr gr--proc)))
+		   (setq gr--proc nil)
+		   (gr-rg-process-output message)))
 		((string-prefix-p "exited abnormally" status)
+		 (gr-cancel-timeout)
 		 ;; extract error message, totally hard code
 		 ;; todo update mode line
-		 (let* ((last-message (car (last (cdr gr--async-proc)))))
+		 (let* ((last-message (car (last (cdr gr--proc)))))
 		   (if last-message
-			   (let* ((lines (split-string last-message "\n")))
-				 (when (eq (length lines) 4)
-				   (gr-log (concat (car lines)
-								   (string-trim-left (car (last lines)) "error:")))))
-			 (gr-log "not found"))))))
+			   (progn
+				 (gr-log last-message)
+				 (let* ((lines (split-string last-message "\n")))
+				   (when (eq (length lines) 4)
+					 (gr-log (concat (car lines)
+									 (string-trim-left (car (last lines)) "error:"))))))
+			 (progn
+			   (gr-log "not found")
+			   (with-gr-buffer (erase-buffer))))))))
+
+(defun gr-cancel-timeout ()
+  (when (and gr--proc-timeout-thread
+			 (thread-alive-p gr--proc-timeout-thread))
+	(thread-signal gr--proc-timeout-thread 'quit nil)
+	(setq gr--proc-timeout-thread nil)))
 
 (defun gr-rg-process-output (output)
   "为减少一次for循环，在遍历处理输出的同时刷新buffer"
@@ -325,13 +333,15 @@ note: this may be called multi times when process returns serval times"
   (with-gr-buffer
    (move-overlay gr-selection-overlay (point-at-bol) (1+ (point-at-eol)))))
 
+;; utils
+
 (defun gr-workspace ()
   "if current directory is a git project, return project path,
 otherwise `default-directory'"
   (let* ((path (gr-proc-output "/usr/local/bin/git" "rev-parse" "--show-toplevel")))
 	(if (eq (car path) 0)
 		(string-trim (cdr path))
-	  default-directory)))
+	  (expand-file-name default-directory))))
 
 (defun gr-proc-output (exe &rest args)
   "(exit-code . output)"

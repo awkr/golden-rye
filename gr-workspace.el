@@ -1,8 +1,6 @@
-;;; gr-workspace.el --- search in current workspace -*-lexical-binding: t-*-
+;;; gr-workspace.el --- search in workspace -*-lexical-binding: t-*-
 
 ;; Copyright (C) 2020 Hongjian Zhu <zhu.life@gmail.com>
-
-;; Version: 20200919
 
 (require 'gr-source)
 (require 'gr-core)
@@ -14,6 +12,7 @@
 
 (defvar gr-rg--min-char-num 3
   "rg will not be invoked unless the input is at least this many chars")
+(defvar gr-rg--dir "")
 (defvar gr-rg--proc nil
   "current rg process, uesd to kill before rising a new one")
 
@@ -37,11 +36,12 @@
   (let* ((input gr-pattern)
 		 (proc (make-process :name gr-rg--proc-name
 							 :buffer gr-rg--proc-buffer-name
-							 :command `(,gr-rg--binary "-S" "-i" "--color" "never" ,input ,(gr-workspace))
+							 :command `(,gr-rg--binary "-S" "-i" "--color" "never" ,input ,gr-rg--dir)
 							 :sentinel #'gr-process-sentinel
 							 :noquery t)))
 	(set-process-query-on-exit-flag proc nil)
 	(setq gr-rg--proc proc)
+	(gr-log "proc cmd: %s" (mapconcat 'identity (process-command proc) "\n"))
 	proc))
 
 (defun gr-rg--check-before-compute (pattern)
@@ -80,6 +80,8 @@
 ;;;###autoload
 (defun gr-workspace-search ()
   (interactive)
+  (setq gr-rg--dir (gr-workspace))
+  (gr-log "about to search in workspace: %s" gr-rg--dir)
   (gr-core nil nil (gr-rg-source) gr-rg--gr-buffer-name))
 
 ;; test
