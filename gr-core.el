@@ -293,7 +293,7 @@ note: this may be called multi times when process returns serval times"
 		 (let* ((last-message (car (last (cdr gr--proc)))))
 		   (if last-message
 			   (progn
-				 (gr-log last-message)
+				 (gr-log "process error: %s" last-message)
 				 (let* ((lines (split-string last-message "\n")))
 				   (when (eq (length lines) 4)
 					 (gr-log (concat (car lines)
