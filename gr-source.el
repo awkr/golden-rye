@@ -1,9 +1,3 @@
-;;; gr--source.el --- data source -*-lexical-binding: t-*-
-
-;; Copyright (C) 2020 Hongjian Zhu <zhu.life@gmail.com>
-
-;; Version: 20200919
-
 (defclass gr-source ()
   ((name
 	:initarg :name
@@ -53,5 +47,4 @@
 		   when val
 		   collect (cons slot val)))
 
-(provide 'gr--source)
-;;; gr--source.el ends here
+(provide 'gr-source)

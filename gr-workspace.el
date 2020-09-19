@@ -1,12 +1,15 @@
-;; search in current workspace
+;;; gr-workspace.el --- search in current workspace -*-lexical-binding: t-*-
 
-(require 'gr--source)
-(require 'gr--core)
+;; Copyright (C) 2020 Hongjian Zhu <zhu.life@gmail.com>
+
+;; Version: 20200919
+
+(require 'gr-source)
+(require 'gr-core)
 
 (defconst gr-rg--gr-buffer-name "*gr-rg*")
 (defconst gr-rg--proc-name "*gr-rg--rg-proc*")
 (defconst gr-rg--proc-buffer-name "*gr-rg--rg-output*")
-(defconst gr-rg--source-name "gr-rg")
 (defconst gr-rg--binary "/usr/local/bin/rg")
 
 (defvar gr-rg--min-char-num 3
@@ -67,12 +70,21 @@
   	(kill-process gr-rg--proc)
   	(setq gr-rg--proc nil)))
 
-(defconst gr-rg-proc-source
-  (gr-make-source gr-rg--source-name 'gr-source-async
+(defun gr-rg-source ()
+  (gr-make-source "gr-rg" 'gr-source-async
 	:candidates-process #'gr-rg-make-proc
 	:check-before-compute #'gr-rg--check-before-compute
 	:render-line #'gr-rg--render-line
 	:cleanup #'gr-rg--cleanup))
 
+;;;###autoload
+(defun gr-workspace-search ()
+  (interactive)
+  (gr-core nil nil (gr-rg-source) gr-rg--gr-buffer-name))
+
 ;; test
-(gr-core nil "doesstrmatches\\(" gr-rg-proc-source gr-rg--gr-buffer-name)
+;; (gr-core nil "doesstrmatches\\(" (gr-rg-source) gr-rg--gr-buffer-name)
+;; (gr-workspace-search)
+
+(provide 'gr-workspace)
+;;; gr-workspace.el ends here

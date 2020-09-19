@@ -196,7 +196,9 @@ the shorest distance and confident that `gr' will always appear in the same plac
 
 (defun gr-read-pattern (&optional prompt input)
   (with-gr-buffer
-   (setq gr-pattern input)
+   (if input
+	   (setq gr-pattern input)
+	 (setq gr-pattern ""))
    (gr-update)
    (let* (timer)
 	 (unwind-protect
@@ -383,4 +385,4 @@ otherwise `default-directory'"
 	(invalid-regexp
 	 err)))
 
-(provide 'gr--core)
+(provide 'gr-core)

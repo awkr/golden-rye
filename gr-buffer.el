@@ -4,8 +4,8 @@
 
 ;; Version: 20200919
 
-(require 'gr--source)
-(require 'gr--core)
+(require 'gr-source)
+(require 'gr-core)
 
 (defconst gr-buffer--gr-buffer-name "*gr-search-buffer*")
 
