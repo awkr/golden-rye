@@ -1,11 +1,6 @@
-;;; gr-workspace.el --- search in workspace -*-lexical-binding: t-*-
-
-;; Copyright (C) 2020 Hongjian Zhu <zhu.life@gmail.com>
-
 (require 'gr-source)
 (require 'gr-core)
 
-(defconst gr-rg--gr-buffer-name "*gr-rg*")
 (defconst gr-rg--proc-name "*gr-rg--rg-proc*")
 (defconst gr-rg--proc-buffer-name "*gr-rg--rg-output*")
 (defconst gr-rg--binary "/usr/local/bin/rg")
@@ -82,11 +77,6 @@
   (interactive)
   (setq gr-rg--dir (gr-workspace))
   (gr-log "about to search in workspace: %s" gr-rg--dir)
-  (gr-core nil nil (gr-rg-source) gr-rg--gr-buffer-name))
-
-;; test
-;; (gr-core nil "doesstrmatches\\(" (gr-rg-source) gr-rg--gr-buffer-name)
-;; (gr-workspace-search)
+  (gr-core nil nil (gr-rg-source) "*gr-workspace-search*"))
 
 (provide 'gr-workspace)
-;;; gr-workspace.el ends here

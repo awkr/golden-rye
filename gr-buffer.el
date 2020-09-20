@@ -1,16 +1,5 @@
-;;; gr-buffer.el --- search in current buffer -*-lexical-binding: t-*-
-
-;; Copyright (C) 2020 Hongjian Zhu <zhu.life@gmail.com>
-
 (require 'gr-source)
 (require 'gr-core)
-
-(defconst gr-buffer--gr-buffer-name "*gr-search-buffer*")
-
-;;;###autoload
-(defun gr-buffer-search ()
-  (interactive)
-  (gr-core nil nil (gr-buffer-source) gr-buffer--gr-buffer-name))
 
 (defun gr-buffer-get-line ()
   (let* ((beg (point))
@@ -31,8 +20,9 @@
 (defun gr-buffer-source ()
   (gr-make-source "gr-search-buffer" 'gr-source-sync :candidates (gr-buffer-content)))
 
-;; ;; test
-;; (gr-buffer-search)
+;;;###autoload
+(defun gr-buffer-search ()
+  (interactive)
+  (gr-core nil nil (gr-buffer-source) "*gr-buffer-search*"))
 
 (provide 'gr-buffer)
-;;; gr-buffer.el ends here
