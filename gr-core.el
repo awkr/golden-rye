@@ -123,17 +123,17 @@
 	 ,@body))
 
 (defun gr-create-gr-buffer ()
-  (let ((inhibit-read-only t))
-	(with-current-buffer (get-buffer-create gr-buffer)
-	  (kill-all-local-variables)
-	  (set (make-local-variable 'buffer-read-only) nil)
-	  (buffer-disable-undo)
-	  (erase-buffer)
-	  (make-local-variable 'gr-source)
-	  (setq require-final-newline nil)
-	  (setq cursor-type nil))
-	(gr-init-overlays gr-buffer)
-	(get-buffer gr-buffer)))
+  (with-current-buffer (get-buffer-create gr-buffer)
+	(kill-all-local-variables)
+	(set (make-local-variable 'buffer-read-only) nil)
+	(buffer-disable-undo)
+	(erase-buffer)
+	(make-local-variable 'gr-source)
+	(setq require-final-newline nil)
+	(setq buffer-read-only t)
+	(setq cursor-type nil))
+  (gr-init-overlays gr-buffer)
+  (get-buffer gr-buffer))
 
 (defvar gr-selection-overlay nil
   "overlay used to highlight the currently selected item")
@@ -266,9 +266,10 @@ the shorest distance and confident that `gr' will always appear in the same plac
 	 (setq gr-in-update nil))))
 
 (defun gr-render (candidates)
-  (erase-buffer)
-  (gr-render-matches candidates)
-  (goto-char (point-min)))
+  (let ((inhibit-read-only t))
+	(erase-buffer)
+	(gr-render-matches candidates)
+	(goto-char (point-min))))
 
 (defun gr-output-filter (proc output)
   "the `process-filter' function for gr async source.
@@ -311,7 +312,8 @@ note: this may be called multi times when process returns serval times"
 (defun gr-rg-process-output (output)
   "为减少一次for循环，在遍历处理输出的同时刷新buffer"
   (with-gr-buffer
-   (let* ((render-fn (assoc-default 'render-line gr-source)))
+   (let* ((inhibit-read-only t)
+		  (render-fn (assoc-default 'render-line gr-source)))
 	 (erase-buffer)
 	 (cl-loop for batch in output
 			  for lines = (split-string batch "\n")
