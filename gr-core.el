@@ -13,6 +13,7 @@
 (defvar gr-source nil
   "a list of candidates")
 (defvar gr-in-update nil)
+(defvar gr-modeline-index "")
 
 (defvar gr--proc nil
   "cons. car is proc, cdr is candidates")
@@ -259,17 +260,34 @@ the shorest distance and confident that `gr' will always appear in the same plac
 																 (kill-process (car gr--proc)))))))
 				 ((or (null gr-pattern) ;; show all candidates
 					  (zerop (length gr-pattern)))
-				  (gr-render candidates))
+				  (gr-render candidates "ALL  "))
 				 (t
-				  (let* ((matches (gr-list-match-pattern candidates gr-pattern)))
-					(gr-render matches))))))
+				  (let* ((matches (gr-list-match-pattern candidates gr-pattern))
+						 (n (length matches)))
+
+					;; 为防止modeline组件跳动，我们约定一下格式
+					(cond ((eq n 0)
+						   (setq gr-modeline-index "-/-  "))
+						  ((> n 99)
+						   (setq gr-modeline-index "1/99+"))
+						  (t
+						   (setq gr-modeline-index (format "%d/%-2d " 1 (length matches)))))
+
+					(gr-render matches gr-modeline-index))))))
 	 (setq gr-in-update nil))))
 
-(defun gr-render (candidates)
+(defun gr-render (candidates index)
   (let ((inhibit-read-only t))
 	(erase-buffer)
 	(gr-render-matches candidates)
-	(goto-char (point-min))))
+	(goto-char (point-min))
+	(gr-update-modeline index)))
+
+(defun gr-update-modeline (index)
+  "INDEX: current/total"
+  (setq mode-line-format
+		(list index
+			  " " mode-line-buffer-identification)))
 
 (defun gr-output-filter (proc output)
   "the `process-filter' function for gr async source.
