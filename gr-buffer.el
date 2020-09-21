@@ -23,6 +23,6 @@
 ;;;###autoload
 (defun gr-buffer-search ()
   (interactive)
-  (gr-core nil nil (gr-buffer-source) "*gr-buffer-search*"))
+  (gr-core nil nil (gr-buffer-source) "*gr-B-search*"))
 
 (provide 'gr-buffer)

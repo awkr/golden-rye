@@ -77,6 +77,6 @@
   (interactive)
   (setq gr-rg--dir (gr-workspace))
   (gr-log "about to search in workspace: %s" gr-rg--dir)
-  (gr-core nil nil (gr-rg-source) "*gr-workspace-search*"))
+  (gr-core nil nil (gr-rg-source) "*gr-W-search*"))
 
 (provide 'gr-workspace)
