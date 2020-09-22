@@ -3,7 +3,7 @@ VERSION:=$(shell date "+%s")
 PACKAGE_NAME:=gr-$(VERSION)
 PACKAGE_DIR:=/tmp/$(PACKAGE_NAME)
 
-package: $(PACKAGE_DIR)
+pkg: $(PACKAGE_DIR)
 	tar cvf ../$(PACKAGE_NAME).tar --exclude="*#" --exclude="*~" --exclude=".git" --exclude=".gitignore" --exclude="Makefile" --exclude="*package-template.el" -C $(PACKAGE_DIR)/.. $(PACKAGE_NAME)
 	rm -rf $(PACKAGE_DIR)
 
@@ -13,7 +13,6 @@ $(PACKAGE_DIR):
 	gsed -re "s/VERSION/$(VERSION)/" $@/gr-package-template.el > $@/gr-pkg.el
 
 clean:
-	# rm -f ../$(PACKAGE_NAME).tar
 	rm -f ../gr-*.tar
 
 # end

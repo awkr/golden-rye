@@ -52,7 +52,7 @@
 		 )))
 
 (defun gr-rg--render-line (line)
-  (cond ((string-prefix-p "/" line) ;; for simplicity and speed, use this expr to detech file
+  (cond ((gr-rg-line-file-p line) ;; for simplicity and speed, use this expr to detech file
 		 (gr-rg--make-face 'gr-rg-file-face line))
 		((> (length line) 0)
 		 line)
@@ -77,6 +77,6 @@
   (interactive)
   (setq gr-rg--dir (gr-workspace))
   (gr-log "about to search in workspace: %s" gr-rg--dir)
-  (gr-core nil nil (gr-rg-source) "*gr-W-search*"))
+  (gr-core nil nil (gr-rg-source) "*gr-w-search*"))
 
 (provide 'gr-workspace)

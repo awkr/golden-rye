@@ -10,10 +10,11 @@
 (defvar gr-last-window-config nil)
 (defvar gr-buffer-height 15)
 (defvar gr-pattern "")
-(defvar gr-source nil
-  "a list of candidates")
+(defvar gr-source nil)
 (defvar gr-in-update nil)
-(defvar gr-modeline-index "")
+
+(defvar gr-candidates-index 0)
+(defvar gr-candidates-len 0)
 
 (defvar gr--proc nil
   "cons. car is proc, cdr is candidates")
@@ -56,18 +57,27 @@
 
 (defun gr-forward-and-mark-line (linum)
   (with-gr-window
-   (forward-line linum)
-   ;; (gr-mark-current-line)
-   ;; (unless (gr-edge-of-buffer-p linum)
-   ;; 	 (forward-line linum)
-   ;; 	 (gr-mark-current-line))
-   ))
+   (cond ((> linum 0)
+		  (when (or (gr-string-empty-p gr-pattern)
+					(<= (+ gr-candidates-index linum) gr-candidates-len))
+			(gr-do-forward-and-mark-line linum)))
+		 ((< linum 0)
+		  (when (or (gr-string-empty-p gr-pattern)
+					(>= (+ gr-candidates-index linum) 1))
+			(gr-do-forward-and-mark-line linum))))))
+
+(defun gr-do-forward-and-mark-line (linum)
+  (forward-line linum)
+  (setq gr-candidates-index (+ gr-candidates-index linum))
+  (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
+  (gr-mark-current-line))
 
 (defun gr-edge-of-buffer-p (n)
   "return non-nil if we are at EOB or BOB"
   (save-excursion
 	(forward-line n)
-	(eq (point-at-bol) (point-at-eol))))
+	(or (eq (point-at-bol) (point-at-eol))
+		(equal (what-line) "Line 1"))))
 
 (defun gr-previous-page ()
   (interactive)
@@ -258,30 +268,28 @@ the shorest distance and confident that `gr' will always appear in the same plac
 																		  (process-live-p (car gr--proc)))
 																 (gr-log "process timeout, kill it")
 																 (kill-process (car gr--proc)))))))
-				 ((or (null gr-pattern) ;; show all candidates
-					  (zerop (length gr-pattern)))
-				  (gr-render candidates "ALL  "))
+				 ((gr-string-empty-p gr-pattern) ;; show all candidates
+				  (gr-render candidates))
 				 (t
-				  (let* ((matches (gr-list-match-pattern candidates gr-pattern))
-						 (n (length matches)))
-
-					;; 为防止modeline组件跳动，我们约定一下格式
-					(cond ((eq n 0)
-						   (setq gr-modeline-index "-/-  "))
-						  ((> n 99)
-						   (setq gr-modeline-index "1/99+"))
-						  (t
-						   (setq gr-modeline-index (format "%d/%-2d " 1 (length matches)))))
-
-					(gr-render matches gr-modeline-index))))))
+				  (let* ((matches (gr-list-match-pattern candidates gr-pattern)))
+					(setq gr-candidates-len (length matches)
+						  gr-candidates-index 1)
+					(gr-render matches))))))
 	 (setq gr-in-update nil))))
 
-(defun gr-render (candidates index)
+(defun gr-modeline-index (index total)
+  ;; 约定格式以尽量防止modeline组件左右移动
+  (cond ((gr-string-empty-p gr-pattern) "ALL  ")
+		((eq total 0) "-/-  ")
+		((> total 99) (format "%d/99+" index))
+		(t (format "%d/%-2d " index total))))
+
+(defun gr-render (candidates)
   (let ((inhibit-read-only t))
 	(erase-buffer)
 	(gr-render-matches candidates)
-	(goto-char (point-min))
-	(gr-update-modeline index)))
+	(gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
+	(gr-move-to-first-line)))
 
 (defun gr-update-modeline (index)
   "INDEX: current/total"
@@ -331,13 +339,24 @@ note: this may be called multi times when process returns serval times"
   "为减少一次for循环，在遍历处理输出的同时刷新buffer"
   (with-gr-buffer
    (let* ((inhibit-read-only t)
-		  (render-fn (assoc-default 'render-line gr-source)))
+		  (render-fn (assoc-default 'render-line gr-source))
+		  (n 0))
 	 (erase-buffer)
 	 (cl-loop for batch in output
 			  for lines = (split-string batch "\n")
-			  do (cl-loop for line in lines
-						  do (let* ((ln (funcall render-fn line)))
-							   (when ln (insert ln "\n"))))))))
+			  do (progn
+				   (cl-loop for line in lines
+							do (let* ((ln (funcall render-fn line)))
+								 (when ln
+								   (insert ln "\n")
+								   (unless (gr-rg-line-file-p ln) ;; do not count title
+									 (setq n (1+ n))))))))
+	 (setq gr-candidates-len n
+		   gr-candidates-index 1)
+	 (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len)))))
+
+(defun gr-rg-line-file-p (ln)
+  (string-prefix-p "/" ln))
 
 (defun gr-render-matches (matches)
   (cl-loop for m in matches
@@ -385,6 +404,13 @@ otherwise `default-directory'"
 	  (goto-char (point-max))
 	  (insert (apply #'format (cons fmtstr args)) "\n")
 	  (goto-char (point-max)))))
+
+
+(defun gr-string-empty-p (s)
+  (if (or (null gr-pattern)
+		  (zerop (length gr-pattern)))
+	  t
+	nil))
 
 (defun gr-string-match-p (str pattern)
   "return t if STR matches PATTERN, otherwise return nil"
