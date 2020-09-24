@@ -56,7 +56,7 @@
 		 (gr-rg--make-face 'gr-rg-file-face line))
 		((> (length line) 0)
 		 line)
-		(t
+		(t ;; rg的返回结果中，两个文件之间存在空行
 		 nil)))
 
 (defun gr-rg--cleanup ()
@@ -65,18 +65,17 @@
   	(kill-process gr-rg--proc)
   	(setq gr-rg--proc nil)))
 
-(defun gr-rg-source ()
-  (gr-make-source "gr-rg" 'gr-source-async
-	:candidates-process #'gr-rg-make-proc
-	:check-before-compute #'gr-rg--check-before-compute
-	:render-line #'gr-rg--render-line
-	:cleanup #'gr-rg--cleanup))
+(defun gr-rg-make-source ()
+  (gr-make-source 'gr-source-async :candidates-process #'gr-rg-make-proc
+				  :check-before-compute #'gr-rg--check-before-compute
+				  :render-line #'gr-rg--render-line
+				  :cleanup #'gr-rg--cleanup))
 
 ;;;###autoload
 (defun gr-workspace-search ()
   (interactive)
   (setq gr-rg--dir (gr-workspace))
   (gr-log "about to search in workspace: %s" gr-rg--dir)
-  (gr-core nil nil (gr-rg-source) "*gr-w-search*"))
+  (gr-core nil nil (gr-rg-make-source) "*gr-w-search*"))
 
 (provide 'gr-workspace)

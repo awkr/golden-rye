@@ -2,6 +2,7 @@
 
 (require 'cl-lib)
 (require 'subr-x)
+(require 'gr-source)
 
 (defconst gr-buffer "*gr*")
 
@@ -55,22 +56,46 @@
   (interactive)
   (gr-forward-and-mark-line 1))
 
-(defun gr-forward-and-mark-line (linum)
+(cl-defun gr-forward-and-mark-line (linum)
   (with-gr-window
-   (cond ((> linum 0)
-		  (when (or (gr-string-empty-p gr-pattern)
-					(<= (+ gr-candidates-index linum) gr-candidates-len))
-			(gr-do-forward-and-mark-line linum)))
-		 ((< linum 0)
-		  (when (or (gr-string-empty-p gr-pattern)
-					(>= (+ gr-candidates-index linum) 1))
-			(gr-do-forward-and-mark-line linum))))))
+   ;; (gr-log "movement index %d total %d" gr-candidates-index gr-candidates-len)
+   (cond ((> linum 0) ;; move down
+		  ;; 下越界
+		  (let* ((ln-idx (what-line)))
+			(save-excursion
+			  (let ((inhibit-field-text-motion t))
+				(end-of-buffer)
+				(when (equal (what-line) ln-idx)
+				  (cl-return-from gr-forward-and-mark-line)))))
+		  (gr--forward-and-mark-line linum))
+		 ((< linum 0) ;; move up
+		  ;; 上越界
+		  (when (or (equal (what-line) "Line 1")
+					(and (gr-source-async-p gr-source)
+						 (equal (what-line) "Line 2")))
+			(cl-return-from gr-forward-and-mark-line))
+		  (gr--forward-and-mark-line linum)))))
 
-(defun gr-do-forward-and-mark-line (linum)
-  (forward-line linum)
-  (setq gr-candidates-index (+ gr-candidates-index linum))
-  (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
-  (gr-mark-current-line))
+(defun gr--forward-and-mark-line (linum)
+  (cond ((gr-source-sync-p gr-source)
+		 (forward-line linum)
+		 (setq gr-candidates-index (+ gr-candidates-index linum))
+		 (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
+		 (gr-mark-current-line))
+		((gr-source-async-p gr-source)
+		 ;; todo 文件行不更新modeline的index [done]
+		 ;; todo 打开文件：处于当前文件内容行时，按住组合键C-x f
+
+		 (forward-line linum)
+		 ;; 移动时自动略过文件
+		 (when (gr-rg-line-file-p (gr-line-at-point))
+		   (forward-line (if (> linum 0) 1 -1)))
+		 (setq gr-candidates-index (+ gr-candidates-index linum))
+		 (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
+		 (gr-mark-current-line))))
+
+(defun gr-line-at-point ()
+  (buffer-substring-no-properties (point-at-bol) (point-at-eol)))
 
 (defun gr-edge-of-buffer-p (n)
   "return non-nil if we are at EOB or BOB"
@@ -81,15 +106,19 @@
 
 (defun gr-previous-page ()
   (interactive)
-  (with-gr-window
-   (scroll-down)
-   (gr-mark-current-line)))
+  ;; (with-gr-window
+  ;;  (scroll-down)
+  ;;  (gr-mark-current-line))
+  (gr-forward-and-mark-line (* (1- gr-buffer-height) -1))
+  )
 
 (defun gr-next-page ()
   (interactive)
-  (with-gr-window
-   (scroll-up)
-   (gr-mark-current-line)))
+  ;; (with-gr-window
+  ;;  (scroll-up)
+  ;;  (gr-mark-current-line))
+  (gr-forward-and-mark-line (1- gr-buffer-height))
+  )
 
 (defvar gr-map
   (let ((map (make-sparse-keymap)))
@@ -115,11 +144,14 @@
   )
 
 (defun gr-cleanup ()
-  (let* ((cleanup (assoc-default 'cleanup gr-source)))
+  (let* ((cleanup (oref gr-source cleanup)))
 	(when cleanup
 	  (funcall cleanup)))
+
   (gr-prevent-switching-other-window :enabled nil)
-  (gr-window-config 'restore))
+  (gr-window-config 'restore)
+
+  (setq gr-source nil))
 
 (defun gr-window ()
   (get-buffer-window gr-buffer 0))
@@ -180,7 +212,7 @@ the shorest distance and confident that `gr' will always appear in the same plac
 		   (split-window (selected-window) nil 'below))
 		  (t ;; more than one window
 		   (let* ((w (gr-get-edge-window-in-direction (selected-window) 'below)))
-			 (if (> (window-body-height w) (- gr-buffer-height 1))
+			 (if (> (window-body-height w) (1- gr-buffer-height))
 				 (split-window w nil 'below)
 			   w))))))
 
@@ -244,37 +276,39 @@ the shorest distance and confident that `gr' will always appear in the same plac
 (cl-defun gr-update ()
   (with-gr-buffer
    (unwind-protect
-	   (let* ((fn (assoc-default 'candidates gr-source))
-			  (procfn (assoc-default 'candidates-process gr-source))
-			  (checker-fn (assoc-default 'check-before-compute gr-source)))
-		 (when checker-fn
-		   (condition-case err
-			   (funcall checker-fn gr-pattern)
-			 (error
-			  (gr-log "check failed: %s" (error-message-string err))
-			  ;; todo update mode line to show tips
-			  (cl-return-from gr-update)
-			  )))
-		 (let* ((candidates (if procfn
-								(funcall procfn)
-							  fn)))
-		   (cond ((processp candidates)
-				  (setq gr--proc (cons candidates nil))
-				  ;; candidates will be filtered in process filter
-				  (set-process-filter candidates 'gr-output-filter)
-				  (setq gr--proc-timeout-thread (make-thread (lambda ()
-															   (sleep-for 5)
-															   (when (and gr--proc
-																		  (process-live-p (car gr--proc)))
-																 (gr-log "process timeout, kill it")
-																 (kill-process (car gr--proc)))))))
-				 ((gr-string-empty-p gr-pattern) ;; show all candidates
-				  (gr-render candidates))
-				 (t
-				  (let* ((matches (gr-list-match-pattern candidates gr-pattern)))
-					(setq gr-candidates-len (length matches)
+	   (cond ((gr-source-sync-p gr-source)
+			  (let* ((c (oref gr-source candidates)))
+				(if (gr-string-empty-p gr-pattern) ;; show all candidates
+					(progn
+					  (setq gr-candidates-len (length c)
+							gr-candidates-index 1)
+					  (gr-render c))
+				  (let* ((matched (gr-list-match-pattern c gr-pattern)))
+					(setq gr-candidates-len (length matched)
 						  gr-candidates-index 1)
-					(gr-render matches))))))
+					(gr-render matched))))
+			  )
+			 ((gr-source-async-p gr-source)
+			  (let* ((proc-fn (oref gr-source candidates-process))
+					 (check-fn (oref gr-source check-before-compute)))
+				(when check-fn
+				  (condition-case err
+					  (funcall check-fn gr-pattern)
+					(error
+					 (gr-log "check failed: %s" (error-message-string err))
+					 ;; todo update mode line to show tips
+					 (cl-return-from gr-update))))
+				(let* ((proc (funcall proc-fn)))
+				  ;; candidates will be filtered in process filter
+				  (set-process-filter proc 'gr-output-filter)
+				  (setq gr--proc (cons proc nil))
+				  (setq gr--proc-timeout-thread
+						(make-thread (lambda ()
+									   (sleep-for 5)
+									   (when (and gr--proc
+												  (process-live-p (car gr--proc)))
+										 (gr-log "process timeout, kill it")
+										 (kill-process (car gr--proc))))))))))
 	 (setq gr-in-update nil))))
 
 (defun gr-modeline-index (index total)
@@ -309,12 +343,12 @@ note: this may be called multi times when process returns serval times"
   (unless (eq proc (car gr--proc)) (cl-return-form gr-process-sentinel))
   (gr-log (format "proc status: %s" status))
   (cond ((equal status "finished\n")
-		 (gr-cancel-timeout)
-		 (let* ((message (cdr gr--proc)))
+		 (gr-proc-cancel-timeout)
+		 (let* ((output (cdr gr--proc)))
 		   (setq gr--proc nil)
-		   (gr-rg-process-output message)))
+		   (gr-rg-process-output output)))
 		((string-prefix-p "exited abnormally" status)
-		 (gr-cancel-timeout)
+		 (gr-proc-cancel-timeout)
 		 ;; extract error message, totally hard code
 		 ;; todo update mode line
 		 (let* ((last-message (car (last (cdr gr--proc)))))
@@ -329,7 +363,7 @@ note: this may be called multi times when process returns serval times"
 			   (gr-log "not found")
 			   (with-gr-buffer (erase-buffer))))))))
 
-(defun gr-cancel-timeout ()
+(defun gr-proc-cancel-timeout ()
   (when (and gr--proc-timeout-thread
 			 (thread-alive-p gr--proc-timeout-thread))
 	(thread-signal gr--proc-timeout-thread 'quit nil)
@@ -339,28 +373,45 @@ note: this may be called multi times when process returns serval times"
   "为减少一次for循环，在遍历处理输出的同时刷新buffer"
   (with-gr-buffer
    (let* ((inhibit-read-only t)
-		  (render-fn (assoc-default 'render-line gr-source))
+		  (render-fn (oref gr-source render-line))
 		  (n 0))
 	 (erase-buffer)
 	 (cl-loop for batch in output
-			  for lines = (split-string batch "\n")
-			  do (progn
-				   (cl-loop for line in lines
-							do (let* ((ln (funcall render-fn line)))
-								 (when ln
-								   (insert ln "\n")
-								   (unless (gr-rg-line-file-p ln) ;; do not count title
-									 (setq n (1+ n))))))))
+			  do (setq n (+ (gr-proc-insert-batch render-fn batch) n)))
 	 (setq gr-candidates-len n
-		   gr-candidates-index 1)
-	 (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len)))))
+		   gr-candidates-index 0)
+	 (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
+	 (gr-move-to-first-line)
+	 (gr-forward-and-mark-line 1))))
+
+(defun gr-proc-insert-batch (render batch)
+  "return number of candidates in BATCH"
+  (let* ((lines (split-string batch "\n"))
+		 ;; ignore file line
+		 (n (1- (length lines)))
+		 (valid-linum n))
+	(cl-loop for i from 0
+			 for line in lines
+			 do (let* ((ln (funcall render line)))
+				  (if ln
+					  (progn
+						(insert ln)
+						(when (< i n)
+						  (insert "\n")))
+					(setq valid-linum (1- valid-linum)))))
+	valid-linum))
 
 (defun gr-rg-line-file-p (ln)
   (string-prefix-p "/" ln))
 
 (defun gr-render-matches (matches)
-  (cl-loop for m in matches
-		   do (insert m "\n")))
+  (let* ((last-index (1- (length matches))))
+	(cl-loop for i from 0
+			 for m in matches
+			 do (progn
+				  (insert m)
+				  (when (< i last-index)
+					(insert "\n"))))))
 
 (defun gr-move-to-first-line ()
   "goto first line of `gr-buffer'"
@@ -404,7 +455,6 @@ otherwise `default-directory'"
 	  (goto-char (point-max))
 	  (insert (apply #'format (cons fmtstr args)) "\n")
 	  (goto-char (point-max)))))
-
 
 (defun gr-string-empty-p (s)
   (if (or (null gr-pattern)
