@@ -59,17 +59,17 @@
   (with-gr-window
    (cond ((> linum 0) ;; move down
 		  ;; 下越界
-		  (when (< (car gr-candidates-ptr) (cdr gr-candidates-ptr))
+		  (when (< (car gr-candidate-ptr) (cdr gr-candidate-ptr))
 			(gr--forward-and-mark-line linum)))
 		 ((< linum 0) ;; move up
 		  ;; 上越界
-		  (when (> gr-candidates-index 1)
+		  (when (> (car gr-candidate-ptr) 1)
 			(gr--forward-and-mark-line linum))))))
 
 (defun gr--forward-and-mark-line (linum)
   (cond ((gr-source-sync-p gr-source)
 		 (forward-line linum)
-		 (setq gr-candidates-index (+ gr-candidates-index linum))
+		 (setcar gr-candidate-ptr (+ (car gr-candidate-ptr) linum))
 		 (gr-update-modeline (gr-modeline-gen-index))
 		 (gr-mark-current-line))
 		((gr-source-async-p gr-source)
@@ -80,7 +80,7 @@
 		 ;; 移动时自动略过文件
 		 (when (gr-rg-line-file-p (gr-line-at-point))
 		   (forward-line (if (> linum 0) 1 -1)))
-		 (setq gr-candidates-index (+ gr-candidates-index linum))
+		 (setcar gr-candidate-ptr (+ (car gr-candidate-ptr) linum))
 		 (gr-update-modeline (gr-modeline-gen-index))
 		 (gr-mark-current-line))))
 
