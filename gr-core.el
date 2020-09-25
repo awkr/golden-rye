@@ -13,7 +13,9 @@
 (defvar gr-pattern "")
 (defvar gr-source nil)
 (defvar gr-in-update nil)
-
+;; todo use cons to refactor line position
+;; (defvar gr-candidate-ptr nil
+;;   "line position: (index . total)")
 (defvar gr-candidates-index 0)
 (defvar gr-candidates-len 0)
 
@@ -65,6 +67,7 @@
 			(save-excursion
 			  (let ((inhibit-field-text-motion t))
 				(end-of-buffer)
+				;; (gr-log "current %s before %s" (what-line) ln-idx)
 				(when (equal (what-line) ln-idx)
 				  (cl-return-from gr-forward-and-mark-line)))))
 		  (gr--forward-and-mark-line linum))
@@ -80,7 +83,7 @@
   (cond ((gr-source-sync-p gr-source)
 		 (forward-line linum)
 		 (setq gr-candidates-index (+ gr-candidates-index linum))
-		 (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
+		 (gr-update-modeline (gr-modeline-gen-index))
 		 (gr-mark-current-line))
 		((gr-source-async-p gr-source)
 		 ;; todo 文件行不更新modeline的index [done]
@@ -91,7 +94,7 @@
 		 (when (gr-rg-line-file-p (gr-line-at-point))
 		   (forward-line (if (> linum 0) 1 -1)))
 		 (setq gr-candidates-index (+ gr-candidates-index linum))
-		 (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
+		 (gr-update-modeline (gr-modeline-gen-index))
 		 (gr-mark-current-line))))
 
 (defun gr-line-at-point ()
@@ -302,18 +305,18 @@ the shorest distance and confident that `gr' will always appear in the same plac
 				  (setq gr--proc (cons proc nil))))))
 	 (setq gr-in-update nil))))
 
-(defun gr-modeline-index (index total)
+(defun gr-modeline-gen-index ()
   ;; 约定格式以尽量防止modeline组件左右移动
   (cond ((gr-string-empty-p gr-pattern) "ALL  ")
-		((eq total 0) "-/-  ")
-		((> total 99) (format "%d/99+" index))
-		(t (format "%d/%-2d " index total))))
+		((eq gr-candidates-len 0) "-/-  ")
+		((> gr-candidates-len 99) (format "%d/99+" gr-candidates-index))
+		(t (format "%d/%-2d " gr-candidates-index gr-candidates-len))))
 
 (defun gr-render (candidates)
   (let ((inhibit-read-only t))
 	(erase-buffer)
 	(gr-render-matches candidates)
-	(gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
+	(gr-update-modeline (gr-modeline-gen-index))
 	(gr-move-to-first-line)))
 
 (defun gr-update-modeline (index)
@@ -322,42 +325,38 @@ the shorest distance and confident that `gr' will always appear in the same plac
 		(list index
 			  " " mode-line-buffer-identification)))
 
-(defun gr-rg-show-output (output)
-  "为减少一次for循环，在遍历处理输出的同时刷新buffer"
+(defun gr-rg-on-finished (output)
+  "为降低时间复杂度，在遍历处理输出的同时刷新buffer"
   (with-gr-buffer
    (let* ((inhibit-read-only t)
 		  (render-fn (oref gr-source render-line))
-		  (max-index (1- (length output)))
+		  (lines (split-string (string-trim output) "\n"))
+		  (max-ln-index (1- (length lines)))
 		  (n 0))
 	 (erase-buffer)
 	 (cl-loop for i from 0
-			  for batch in output
+			  for line in lines
 			  do (progn
-				   (setq n (+ (gr-rg-insert-batch render-fn batch) n))
-				   (when (< i max-index)
-					 (insert "\n"))))
+				   (let* ((ln (funcall render-fn line)))
+					 (when ln
+					   (insert ln)
+					   ;; 最后一行不插入回车
+					   (when (< i max-ln-index) (insert "\n"))
+					   (unless (gr-rg-line-file-p line) ;; ignore file line
+						 (setq n (1+ n)))))))
 	 (setq gr-candidates-len n
 		   gr-candidates-index 0)
-	 (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
+	 (gr-update-modeline (gr-modeline-gen-index))
 	 (gr-move-to-first-line)
 	 (gr-forward-and-mark-line 1))))
 
-(defun gr-rg-insert-batch (render batch)
-  "return number of candidates in BATCH"
-  (let* ((lines (split-string batch "\n"))
-		 ;; ignore file line
-		 (n (1- (length lines)))
-		 (valid-linum n))
-	(cl-loop for i from 0
-			 for line in lines
-			 do (let* ((ln (funcall render line)))
-				  (if ln
-					  (progn
-						(insert ln)
-						(when (< i n)
-						  (insert "\n")))
-					(setq valid-linum (1- valid-linum)))))
-	valid-linum))
+(defun gr-rg-on-not-found ()
+  (with-gr-buffer
+   (let* ((inhibit-read-only t))
+	 (erase-buffer)
+	 (setq gr-candidates-len 0
+		   gr-candidates-index -1)
+	 (gr-update-modeline (gr-modeline-gen-index)))))
 
 (defun gr-rg-line-file-p (ln)
   (string-prefix-p "/" ln))
