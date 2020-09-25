@@ -63,21 +63,12 @@
    ;; (gr-log "movement index %d total %d" gr-candidates-index gr-candidates-len)
    (cond ((> linum 0) ;; move down
 		  ;; 下越界
-		  (let* ((ln-idx (what-line)))
-			(save-excursion
-			  (let ((inhibit-field-text-motion t))
-				(end-of-buffer)
-				;; (gr-log "current %s before %s" (what-line) ln-idx)
-				(when (equal (what-line) ln-idx)
-				  (cl-return-from gr-forward-and-mark-line)))))
-		  (gr--forward-and-mark-line linum))
+		  (when (< gr-candidates-index gr-candidates-len)
+			(gr--forward-and-mark-line linum)))
 		 ((< linum 0) ;; move up
 		  ;; 上越界
-		  (when (or (equal (what-line) "Line 1")
-					(and (gr-source-async-p gr-source)
-						 (equal (what-line) "Line 2")))
-			(cl-return-from gr-forward-and-mark-line))
-		  (gr--forward-and-mark-line linum)))))
+		  (when (> gr-candidates-index 1)
+			(gr--forward-and-mark-line linum))))))
 
 (defun gr--forward-and-mark-line (linum)
   (cond ((gr-source-sync-p gr-source)
