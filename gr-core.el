@@ -19,7 +19,6 @@
 
 (defvar gr--proc nil
   "cons. car is proc, cdr is candidates")
-(defvar gr--proc-timeout-thread nil)
 
 (defgroup gr nil
   ""
@@ -40,9 +39,10 @@
   (interactive)
   (when gr--proc
 	(let* ((proc (car gr--proc)))
-	  (set-process-filter proc nil)
-	  (delete-process proc)))
-  (abort-recursive-edit))
+	  (gr-log "clean proc before quit")
+	  (delete-process (car gr--proc)))
+	(setq gr--proc nil))
+  (exit-minibuffer))
 
 (defun gr-keyboard-enter ()
   (interactive)
@@ -295,20 +295,11 @@ the shorest distance and confident that `gr' will always appear in the same plac
 				  (condition-case err
 					  (funcall check-fn gr-pattern)
 					(error
-					 (gr-log "check failed: %s" (error-message-string err))
+					 ;; (gr-log "check failed: %s" (error-message-string err))
 					 ;; todo update mode line to show tips
 					 (cl-return-from gr-update))))
 				(let* ((proc (funcall proc-fn)))
-				  ;; candidates will be filtered in process filter
-				  (set-process-filter proc 'gr-output-filter)
-				  (setq gr--proc (cons proc nil))
-				  (setq gr--proc-timeout-thread
-						(make-thread (lambda ()
-									   (sleep-for 5)
-									   (when (and gr--proc
-												  (process-live-p (car gr--proc)))
-										 (gr-log "process timeout, kill it")
-										 (kill-process (car gr--proc))))))))))
+				  (setq gr--proc (cons proc nil))))))
 	 (setq gr-in-update nil))))
 
 (defun gr-modeline-index (index total)
@@ -331,60 +322,27 @@ the shorest distance and confident that `gr' will always appear in the same plac
 		(list index
 			  " " mode-line-buffer-identification)))
 
-(defun gr-output-filter (proc output)
-  "the `process-filter' function for gr async source.
-note: this may be called multi times when process returns serval times"
-  (when (eq proc (car gr--proc))
-	(gr-log "output filter")
-	(setcdr gr--proc (append (cdr gr--proc) `(,(string-trim output))))))
-
-(cl-defun gr-process-sentinel (proc status)
-  "为防止process多次返回造成Emacs闪烁，以及为了提供稳定的用户体验，`gr'会一次性返回process的执行结果。process的性能由process负责，实际上，对于如rg之类的程序，在大多数项目中性能（用户等待搜索返回的时间）几乎没有影响"
-  (unless (eq proc (car gr--proc)) (cl-return-form gr-process-sentinel))
-  (gr-log (format "proc status: %s" status))
-  (cond ((equal status "finished\n")
-		 (gr-proc-cancel-timeout)
-		 (let* ((output (cdr gr--proc)))
-		   (setq gr--proc nil)
-		   (gr-rg-process-output output)))
-		((string-prefix-p "exited abnormally" status)
-		 (gr-proc-cancel-timeout)
-		 ;; extract error message, totally hard code
-		 ;; todo update mode line
-		 (let* ((last-message (car (last (cdr gr--proc)))))
-		   (if last-message
-			   (progn
-				 (gr-log "process error: %s" last-message)
-				 (let* ((lines (split-string last-message "\n")))
-				   (when (eq (length lines) 4)
-					 (gr-log (concat (car lines)
-									 (string-trim-left (car (last lines)) "error:"))))))
-			 (progn
-			   (gr-log "not found")
-			   (with-gr-buffer (erase-buffer))))))))
-
-(defun gr-proc-cancel-timeout ()
-  (when (and gr--proc-timeout-thread
-			 (thread-alive-p gr--proc-timeout-thread))
-	(thread-signal gr--proc-timeout-thread 'quit nil)
-	(setq gr--proc-timeout-thread nil)))
-
-(defun gr-rg-process-output (output)
+(defun gr-rg-show-output (output)
   "为减少一次for循环，在遍历处理输出的同时刷新buffer"
   (with-gr-buffer
    (let* ((inhibit-read-only t)
 		  (render-fn (oref gr-source render-line))
+		  (max-index (1- (length output)))
 		  (n 0))
 	 (erase-buffer)
-	 (cl-loop for batch in output
-			  do (setq n (+ (gr-proc-insert-batch render-fn batch) n)))
+	 (cl-loop for i from 0
+			  for batch in output
+			  do (progn
+				   (setq n (+ (gr-rg-insert-batch render-fn batch) n))
+				   (when (< i max-index)
+					 (insert "\n"))))
 	 (setq gr-candidates-len n
 		   gr-candidates-index 0)
 	 (gr-update-modeline (gr-modeline-index gr-candidates-index gr-candidates-len))
 	 (gr-move-to-first-line)
 	 (gr-forward-and-mark-line 1))))
 
-(defun gr-proc-insert-batch (render batch)
+(defun gr-rg-insert-batch (render batch)
   "return number of candidates in BATCH"
   (let* ((lines (split-string batch "\n"))
 		 ;; ignore file line
