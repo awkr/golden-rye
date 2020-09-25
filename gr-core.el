@@ -13,11 +13,8 @@
 (defvar gr-pattern "")
 (defvar gr-source nil)
 (defvar gr-in-update nil)
-;; todo use cons to refactor line position
-;; (defvar gr-candidate-ptr nil
-;;   "line position: (index . total)")
-(defvar gr-candidates-index 0)
-(defvar gr-candidates-len 0)
+(defvar gr-candidate-ptr nil
+  "line position: (index . total)")
 
 (defvar gr--proc nil
   "cons. car is proc, cdr is candidates")
@@ -60,10 +57,9 @@
 
 (cl-defun gr-forward-and-mark-line (linum)
   (with-gr-window
-   ;; (gr-log "movement index %d total %d" gr-candidates-index gr-candidates-len)
    (cond ((> linum 0) ;; move down
 		  ;; 下越界
-		  (when (< gr-candidates-index gr-candidates-len)
+		  (when (< (car gr-candidates-ptr) (cdr gr-candidates-ptr))
 			(gr--forward-and-mark-line linum)))
 		 ((< linum 0) ;; move up
 		  ;; 上越界
@@ -274,12 +270,10 @@ the shorest distance and confident that `gr' will always appear in the same plac
 			  (let* ((c (oref gr-source candidates)))
 				(if (gr-string-empty-p gr-pattern) ;; show all candidates
 					(progn
-					  (setq gr-candidates-len (length c)
-							gr-candidates-index 1)
+					  (setq gr-candidate-ptr (cons 1 (length c)))
 					  (gr-render c))
 				  (let* ((matched (gr-list-match-pattern c gr-pattern)))
-					(setq gr-candidates-len (length matched)
-						  gr-candidates-index 1)
+					(setq gr-candidate-ptr (cons 1 (length matched)))
 					(gr-render matched))))
 			  )
 			 ((gr-source-async-p gr-source)
@@ -299,9 +293,9 @@ the shorest distance and confident that `gr' will always appear in the same plac
 (defun gr-modeline-gen-index ()
   ;; 约定格式以尽量防止modeline组件左右移动
   (cond ((gr-string-empty-p gr-pattern) "ALL  ")
-		((eq gr-candidates-len 0) "-/-  ")
-		((> gr-candidates-len 99) (format "%d/99+" gr-candidates-index))
-		(t (format "%d/%-2d " gr-candidates-index gr-candidates-len))))
+		((not gr-candidate-ptr) "-/-  ")
+		((> (cdr gr-candidate-ptr) 99) (format "%d/99+" (car gr-candidate-ptr)))
+		(t (format "%d/%-2d " (car gr-candidate-ptr) (cdr gr-candidate-ptr)))))
 
 (defun gr-render (candidates)
   (let ((inhibit-read-only t))
@@ -335,8 +329,7 @@ the shorest distance and confident that `gr' will always appear in the same plac
 					   (when (< i max-ln-index) (insert "\n"))
 					   (unless (gr-rg-line-file-p line) ;; ignore file line
 						 (setq n (1+ n)))))))
-	 (setq gr-candidates-len n
-		   gr-candidates-index 0)
+	 (setq gr-candidate-ptr (cons 0 n))
 	 (gr-update-modeline (gr-modeline-gen-index))
 	 (gr-move-to-first-line)
 	 (gr-forward-and-mark-line 1))))
@@ -345,8 +338,7 @@ the shorest distance and confident that `gr' will always appear in the same plac
   (with-gr-buffer
    (let* ((inhibit-read-only t))
 	 (erase-buffer)
-	 (setq gr-candidates-len 0
-		   gr-candidates-index -1)
+	 (setq gr-candidate-ptr nil)
 	 (gr-update-modeline (gr-modeline-gen-index)))))
 
 (defun gr-rg-line-file-p (ln)
