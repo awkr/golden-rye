@@ -329,7 +329,8 @@ the shorest distance and confident that `gr' will always appear in the same plac
   (gr-log "update modeline: %s %s" state index)
 
   (setq mode-line-format
-		`((:eval (propertize ,index 'font-lock-face '(:foreground ,state)))
+		`(,(if (display-graphic-p) " " "")
+		  (:eval (propertize ,index 'font-lock-face '(:foreground ,state)))
 		  " " mode-line-buffer-identification)))
 
 (defun gr-modeline-update-message (msg)
