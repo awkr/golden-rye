@@ -19,6 +19,11 @@
 (defvar gr--proc nil
   "cons. car is proc, cdr is candidates")
 
+(defconst gr-state-origin "#446644")
+(defconst gr-state-pending "yellow")
+(defconst gr-state-ready "#007700")
+(defconst gr-state-error "red")
+
 (defgroup gr nil
   ""
   :prefix "gr-" :group 'convenience)
@@ -70,10 +75,9 @@
   (cond ((gr-source-sync-p gr-source)
 		 (forward-line linum)
 		 (setcar gr-candidate-ptr (+ (car gr-candidate-ptr) linum))
-		 (gr-update-modeline "green" (gr-modeline-gen-index))
+		 (gr-update-modeline gr-state-ready (gr-modeline-gen-index))
 		 (gr-mark-current-line))
 		((gr-source-async-p gr-source)
-		 ;; todo 文件行不更新modeline的index [done]
 		 ;; todo 打开文件：处于当前文件内容行时，按住组合键C-x f
 
 		 (forward-line linum)
@@ -81,7 +85,7 @@
 		 (when (gr-rg-line-file-p (gr-line-at-point))
 		   (forward-line (if (> linum 0) 1 -1)))
 		 (setcar gr-candidate-ptr (+ (car gr-candidate-ptr) linum))
-		 (gr-update-modeline "green" (gr-modeline-gen-index))
+		 (gr-update-modeline gr-state-ready (gr-modeline-gen-index))
 		 (gr-mark-current-line))))
 
 (defun gr-line-at-point ()
@@ -269,16 +273,16 @@ the shorest distance and confident that `gr' will always appear in the same plac
 				(if (gr-string-empty-p gr-pattern) ;; show all candidates
 					(progn
 					  (setq gr-candidate-ptr (cons 1 (length c)))
-					  (gr-update-modeline "grey" (gr-modeline-gen-index))
+					  (gr-update-modeline gr-state-origin (gr-modeline-gen-index))
 					  (gr-render c))
 				  (let* ((matched (gr-list-match-pattern c gr-pattern)))
 					(if (eq (length matched) 0)
 						(progn
 						  (setq gr-candidate-ptr nil)
-						  (gr-update-modeline "red" (gr-modeline-gen-index)))
+						  (gr-update-modeline gr-state-error (gr-modeline-gen-index)))
 					  (progn
 						(setq gr-candidate-ptr (cons 1 (length matched)))
-						(gr-update-modeline "green" (gr-modeline-gen-index))))
+						(gr-update-modeline gr-state-ready (gr-modeline-gen-index))))
 					(gr-render matched))))
 			  )
 			 ((gr-source-async-p gr-source)
@@ -289,21 +293,23 @@ the shorest distance and confident that `gr' will always appear in the same plac
 					  (funcall check-fn gr-pattern)
 					(error
 					 ;; (gr-log "check failed: %s" (error-message-string err))
-					 ;; todo update mode line to show tips
 					 (setq gr-candidate-ptr nil)
-					 (gr-update-modeline "red" (gr-modeline-gen-index))
+					 (gr-update-modeline gr-state-error (gr-modeline-gen-index))
+					 (gr-modeline-update-message (error-message-string err))
 					 (cl-return-from gr-update))))
-				(gr-update-modeline "yellow" (gr-modeline-gen-index))
+				(gr-update-modeline gr-state-pending (gr-modeline-gen-index))
 				(let* ((proc (funcall proc-fn)))
 				  (setq gr--proc (cons proc nil))))))
 	 (setq gr-in-update nil))))
 
 (defun gr-modeline-gen-index ()
   ;; 约定格式以尽量防止modeline组件左右移动
-  (cond ((not gr-candidate-ptr) "-/-  ")
-		((gr-string-empty-p gr-pattern) "ALL  ")
-		((> (cdr gr-candidate-ptr) 99) (format "%d/99+" (car gr-candidate-ptr)))
-		(t (format "%d/%-2d " (car gr-candidate-ptr) (cdr gr-candidate-ptr)))))
+  (cond ((not gr-candidate-ptr) "-/-")
+		((gr-string-empty-p gr-pattern) "ALL")
+		;; ((> (cdr gr-candidate-ptr) 99) (format "%d/99+" (car gr-candidate-ptr)))
+		;; (t (format "%d/%-2d " (car gr-candidate-ptr) (cdr gr-candidate-ptr))))
+		(t (format "%d/%d" (car gr-candidate-ptr) (cdr gr-candidate-ptr))))
+  )
 
 (defun gr-render (candidates)
   (let ((inhibit-read-only t))
@@ -311,18 +317,25 @@ the shorest distance and confident that `gr' will always appear in the same plac
 	(gr-render-matches candidates)
 	(gr-move-to-first-line)))
 
-(defun gr-update-modeline (status index)
-  "
-STATUS: grey, yellow, green, red, means: init, computing, done, error
-INDEX: index/total
-"
-  (gr-log "update modeline: %s" status)
+;;; modeline >>
+
+;; 缓存一些组件值以减少不必要的更新
+(defvar gr-modeline-index "")
+
+(cl-defun gr-update-modeline (state index)
+  (when (equal index gr-modeline-index)	(cl-return-from gr-update-modeline))
+  (setq gr-modeline-index index)
+
+  (gr-log "update modeline: %s %s" state index)
+
   (setq mode-line-format
-		`(,index
-		  " " mode-line-buffer-identification
-		  (:eval (propertize " ●" 'font-lock-face '(:foreground ,status)))
-		  " message"
-		  )))
+		`((:eval (propertize ,index 'font-lock-face '(:foreground ,state)))
+		  " " mode-line-buffer-identification)))
+
+(defun gr-modeline-update-message (msg)
+  (gr-log msg))
+
+;;; << modeline
 
 (defun gr-rg-on-finished (output)
   "为降低时间复杂度，在遍历处理输出的同时刷新buffer"
@@ -344,7 +357,7 @@ INDEX: index/total
 					   (unless (gr-rg-line-file-p line) ;; ignore file line
 						 (setq n (1+ n)))))))
 	 (setq gr-candidate-ptr (cons 0 n))
-	 (gr-update-modeline "green" (gr-modeline-gen-index))
+	 (gr-update-modeline gr-state-ready (gr-modeline-gen-index))
 	 (gr-move-to-first-line)
 	 (gr-forward-and-mark-line 1))))
 
@@ -353,7 +366,7 @@ INDEX: index/total
    (let* ((inhibit-read-only t))
 	 (erase-buffer)
 	 (setq gr-candidate-ptr nil)
-	 (gr-update-modeline "red" (gr-modeline-gen-index)))))
+	 (gr-update-modeline gr-state-error (gr-modeline-gen-index)))))
 
 (defun gr-rg-line-file-p (ln)
   (string-prefix-p "/" ln))

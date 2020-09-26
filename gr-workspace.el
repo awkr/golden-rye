@@ -125,10 +125,10 @@ process的性能由process负责，实际上，对于如rg之类的程序，在�
 				  :cleanup #'gr-rg--cleanup))
 
 ;;;###autoload
-(defun gr-workspace-search ()
+(defun gr-workspace-query ()
   (interactive)
   (setq gr-rg--dir (gr-workspace))
   (gr-log "about to search in workspace: %s" gr-rg--dir)
-  (gr-core nil nil (gr-rg-make-source) "*gr-w-search*"))
+  (gr-core nil nil (gr-rg-make-source) "*gr-w-query*"))
 
 (provide 'gr-workspace)

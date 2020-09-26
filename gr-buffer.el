@@ -10,8 +10,12 @@
   (gr-make-source 'gr-source-sync :candidates (gr-buffer-content)))
 
 ;;;###autoload
-(defun gr-buffer-search ()
+(defun gr-buffer-query ()
   (interactive)
-  (gr-core nil nil (gr-buffer-make-source) "*gr-b-search*"))
+  (gr-core nil nil (gr-buffer-make-source) "*gr-b-query*"))
+
+;;;###autoload
+(defun gr-buffer-query-at-cursor ()
+  (interactive))
 
 (provide 'gr-buffer)
