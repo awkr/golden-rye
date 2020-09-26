@@ -48,7 +48,7 @@
 	(setq gr-rg--proc proc)
 	(setq gr-rg-timeout-thread
 		  (make-thread (lambda ()
-						 (sleep-for 5)
+						 (sleep-for 10)
 						 (when (and gr-rg--proc
 									(process-live-p gr-rg--proc))
 						   (gr-log "rg process timeout, kill it")
