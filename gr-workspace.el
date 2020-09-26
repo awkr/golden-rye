@@ -31,8 +31,6 @@
   ;; kill old proc to get the newest result as soon as possible
   (gr-rg--cleanup)
 
-  (gr-log "creating process")
-  (gr-log "pattern: %s" gr-pattern)
   (let* ((input gr-pattern)
 		 (proc (make-process :name gr-rg--proc-name
 							 :buffer gr-rg--proc-buffer-name
