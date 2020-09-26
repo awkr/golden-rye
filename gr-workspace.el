@@ -48,7 +48,8 @@
 	(setq gr-rg--proc proc)
 	(setq gr-rg-timeout-thread
 		  (make-thread (lambda ()
-						 (sleep-for 10)
+						 ;; gr把响应时间放在第一位，通过压缩超时时间，倒逼gr优化自己
+						 (sleep-for 5)
 						 (when (and gr-rg--proc
 									(process-live-p gr-rg--proc))
 						   (gr-log "rg process timeout, kill it")
@@ -98,6 +99,12 @@ process的性能由process负责，实际上，对于如rg之类的程序，在�
 	(thread-signal gr-rg-timeout-thread 'quit nil)
 	(setq gr-rg-timeout-thread nil)))
 
+(defun gr-rg-kill-rg ()
+  (when (and gr-rg--proc
+  			 (process-live-p gr-rg--proc))
+  	(kill-process gr-rg--proc)
+  	(setq gr-rg--proc nil)))
+
 (defun gr-rg--render-line (line)
   (cond ((gr-rg-line-file-p line) ;; for simplicity and speed, use this expr to detech file
 		 (gr-rg--make-face 'gr-rg-file-face line))
@@ -107,10 +114,8 @@ process的性能由process负责，实际上，对于如rg之类的程序，在�
 		 nil)))
 
 (defun gr-rg--cleanup ()
-  (when (and gr-rg--proc
-  			 (process-live-p gr-rg--proc))
-  	(kill-process gr-rg--proc)
-  	(setq gr-rg--proc nil))
+  (gr-rg-kill-rg)
+  (gr-rg-cancel-timeout)
   (setq gr-rg-output ""))
 
 (defun gr-rg-make-source ()
