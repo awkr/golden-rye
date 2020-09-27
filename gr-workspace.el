@@ -5,7 +5,7 @@
 (defconst gr-rg--proc-buffer-name "*gr-rg--rg-output*")
 (defconst gr-rg--binary "/usr/local/bin/rg")
 
-(defvar gr-rg--min-char-num 3
+(defvar gr-rg--min-char-num 2
   "rg will not be invoked unless the input is at least this many chars")
 (defvar gr-rg--dir "")
 (defvar gr-rg--proc nil
