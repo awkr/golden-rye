@@ -1,6 +1,6 @@
 (defclass gr-source ()
-  ((check-before-compute
-	:initarg :check-before-compute
+  ((check-input
+	:initarg :check-input
 	:initform nil
 	:custom function
 	:documentation

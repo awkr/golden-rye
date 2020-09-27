@@ -287,7 +287,7 @@ the shorest distance and confident that `gr' will always appear in the same plac
 			  )
 			 ((gr-source-async-p gr-source)
 			  (let* ((proc-fn (oref gr-source candidates-process))
-					 (check-fn (oref gr-source check-before-compute)))
+					 (check-fn (oref gr-source check-input)))
 				(when check-fn
 				  (condition-case err
 					  (funcall check-fn gr-pattern)

@@ -54,7 +54,7 @@
 						   (kill-process gr-rg--proc)))))
 	proc))
 
-(defun gr-rg--check-before-compute (pattern)
+(defun gr-rg--check-input (pattern)
   (cond ((< (length pattern) gr-rg--min-char-num)
 		 (user-error "not enough chars: min %d" gr-rg--min-char-num))
 	    (t
@@ -118,7 +118,7 @@ process的性能由process负责，实际上，对于如rg之类的程序，在�
 
 (defun gr-rg-make-source ()
   (gr-make-source 'gr-source-async :candidates-process #'gr-rg-make-proc
-				  :check-before-compute #'gr-rg--check-before-compute
+				  :check-input #'gr-rg--check-input
 				  :render-line #'gr-rg--render-line
 				  :cleanup #'gr-rg--cleanup))
 
